@@ -681,6 +681,14 @@ fn run(
     let mut app = App::new();
     loop {
         terminal.draw(|f| draw(f, &app))?;
+        // Non-blocking poll: keeps the UI responsive even when no input is
+        // arriving (and lets us detect a closed/EOF stdin instead of spinning).
+        if !event::poll(std::time::Duration::from_millis(100))? {
+            if is_stdin_eof() {
+                return Ok(());
+            }
+            continue;
+        }
         if let Event::Key(key) = event::read()? {
             if key.kind != KeyEventKind::Press {
                 continue;
@@ -707,6 +715,35 @@ fn run(
             return Ok(());
         }
     }
+}
+
+/// Best-effort detection of EOF on stdin (used only when stdin is not a TTY,
+/// e.g. piped input in automated tests), so the app can't spin forever.
+#[cfg(unix)]
+fn is_stdin_eof() -> bool {
+    use std::os::unix::io::AsRawFd;
+    let fd = std::io::stdin().as_raw_fd();
+    let mut buf = [0u8; 1];
+    // Peek without consuming; 0 means EOF, -1 with EAGAIN means data pending.
+    let n = unsafe { libc_recv(fd, buf.as_mut_ptr(), 1, MSG_PEEK_FLAGS) };
+    if n < 0 {
+        return false; // would-block or error: treat as "not EOF"
+    }
+    n == 0
+}
+
+#[cfg(unix)]
+const MSG_PEEK_FLAGS: i32 = 2; // MSG_PEEK
+
+#[cfg(unix)]
+extern "C" {
+    #[link_name = "recv"]
+    fn libc_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize;
+}
+
+#[cfg(not(unix))]
+fn is_stdin_eof() -> bool {
+    false
 }
 
 // -----------------------------------------------------------------------------
