@@ -2,10 +2,11 @@ name: Build & Release
 
 on:
   push:
-    branches: ["**"]        # Runs CI gate automatically
-    tags: ["v*"]            # Runs CI + compiles binaries + creates GitHub Release
+    # This matches all branches but explicitly ignores tag names so a tag push won't double-trigger
+    branches: ["**"]        
+    tags: ["v*"]            
   pull_request:
-  workflow_dispatch:        # Manual trigger
+  workflow_dispatch:        
 
 permissions:
   contents: write
@@ -19,8 +20,6 @@ jobs:
   # ---------------------------------------------------------------------------
   check:
     name: Check (${{ matrix.os }})
-    # Skip branch push runs if a tag is pushed simultaneously to avoid double-building
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -131,5 +130,4 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
-          # FIX: softprops/action-gh-release needs a raw wildcard pattern relative to the root/dist folder
           files: dist/*
