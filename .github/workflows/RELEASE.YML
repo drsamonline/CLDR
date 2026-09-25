@@ -2,10 +2,10 @@ name: Build & Release
 
 on:
   push:
-    branches: ["**"]        # every branch -> CI gate runs automatically
-    tags: ["v*"]            # v-prefixed tags -> cross-compiled binaries + GitHub Release
+    branches: ["**"]        # Runs CI gate automatically
+    tags: ["v*"]            # Runs CI + compiles binaries + creates GitHub Release
   pull_request:
-  workflow_dispatch:        # manual trigger from the Actions tab
+  workflow_dispatch:        # Manual trigger
 
 permissions:
   contents: write
@@ -15,10 +15,12 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # CI gate: build + tests on every push / PR (binaries only published on tags)
+  # CI gate: build + tests on every push / PR
   # ---------------------------------------------------------------------------
   check:
     name: Check (${{ matrix.os }})
+    # Skip branch push runs if a tag is pushed simultaneously to avoid double-building
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || !startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -129,6 +131,5 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
-          files: |
-            dist/cldr-*.tar.gz
-            dist/cldr-*.zip
+          # FIX: softprops/action-gh-release needs a raw wildcard pattern relative to the root/dist folder
+          files: dist/*
