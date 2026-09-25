@@ -1,0 +1,25 @@
+[package]
+name = "cldr"
+version = "1.0.0"
+edition = "2021"
+authors = ["Dr. Sohil Momin"]
+description = "CLDR - Command Line Dispatch & Route: minimal, zero-bloat command launcher and background daemon for Windows and Linux."
+license = "MIT"
+readme = "README.md"
+
+[[bin]]
+name = "cldr"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.28"
+ratatui = "0.29"
+open = "5.3"
+walkdir = "2.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
