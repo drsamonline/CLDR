@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=TrayDrop
+GenericName=Background Console App
+Comment=Runs TrayDrop in the tray; launch again to bring the console window forward.
+Exec=/bin/bash -c "cd ~/.local/share/traydrop 2>/dev/null || cd /; ./scripts/launch_traydrop.sh"
+TryExec=bash
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;System;
+StartupNotify=false
+StartupWMClass=traydrop
