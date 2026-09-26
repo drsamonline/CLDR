@@ -56,7 +56,7 @@ CLDR *routes* it to the right action instantly.
 | 🚀 **Shortcut-bound launch** | One `.lnk` / `.desktop` entry; re-launching *summons* the existing window |
 | 📴 **Background + tray-resident** | `cldr --tray` runs hidden, keeps the dispatch daemon alive, autostarts on login |
 | 🧠 **Smart routing cascade** | math → existing path → PATH binary → DuckDuckGo web search |
-| 🧮 **Zero-dep calculator** | `+ - * / ( ) unary-minus` parser written from scratch, fully unit-tested |
+| 🧮 **Zero-dep calculator** | `+ - * / % ^ ( ) unary-minus` parser written from scratch, fully unit-tested |
 | 🪟 **True foreground summon** | Win32 `AttachThreadInput` foreground trick; `xdotool`/`wmctrl` on Linux |
 | 🩺 **Hardware diagnostics** | `/sys` — cores, memory, hostname, user — without spawning tools |
 | 🪶 **Near-idle daemon** | detached worker, sentinel-file IPC, ~0 CPU, <10 MB RSS |
@@ -71,7 +71,7 @@ CLDR *routes* it to the right action instantly.
 | `/ls [path]` | list directory (capped at 50) |
 | `/find <name>` | recursive bounded search (depth 4) |
 | `/web <query>` | DuckDuckGo search in browser |
-| `/calc <expr>` | arithmetic `+ - * / ( ) unary-` |
+| `/calc <expr>` | arithmetic `+ - * / % ^ ( ) unary-` |
 | `/sys` | hardware diagnostics |
 | `/help` · `/clear` | cheat sheet · clear pane |
 | *(no prefix)* | auto-route: math → path → PATH app → web |

@@ -56,7 +56,7 @@ pub fn push(entries: &Rc<RefCell<Vec<Entry>>>, e: Entry) {
 }
 
 // ---------------------------------------------------------------------------
-// Zero-dependency arithmetic parser (+ - * / with parentheses & unary minus)
+// Zero-dependency arithmetic parser (+ - * / % ^ with parentheses & unary minus)
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -90,6 +90,10 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 let word: &str = &src[start..i];
                 let v: f64 = word.parse().map_err(|_| format!("bad number '{word}'"))?;
                 toks.push(Tok::Num(v));
+            }
+            '%' => {
+                toks.push(Tok::Op('%'));
+                i += 1;
             }
             '+' | '-' | '*' | '/' | '^' => {
                 toks.push(Tok::Op(c));
@@ -150,16 +154,20 @@ impl Parser {
         Ok(v)
     }
 
-    // term := factor (('*'|'/') factor)*
+    // term := factor (('*'|'/'|'%') factor)*
     fn eval_term(&mut self) -> Result<f64, String> {
         let mut v = self.eval_factor()?;
-        while let Some(Tok::Op(o @ ('*' | '/'))) = self.peek().cloned() {
+        while let Some(Tok::Op(o @ ('*' | '/' | '%'))) = self.peek().cloned() {
             self.bump();
             let r = self.eval_factor()?;
-            if o == '/' && r == 0.0 {
-                return Err("division by zero".into());
+            if o != '*' && r == 0.0 {
+                return Err(if o == '%' { "modulo by zero" } else { "division by zero" }.into());
             }
-            v = if o == '*' { v * r } else { v / r };
+            v = match o {
+                '*' => v * r,
+                '/' => v / r,
+                _ => v % r,
+            };
         }
         Ok(v)
     }
@@ -419,7 +427,7 @@ pub fn cmd_calc(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     if arg.is_empty() {
         push(
             entries,
-            Entry::new("ERR", "/calc <expr> — arithmetic with + - * / ( ) and unary minus"),
+            Entry::new("ERR", "/calc <expr> — arithmetic with + - * / % ^ ( ) and unary minus"),
         );
         return "usage: /calc".into();
     }
@@ -625,7 +633,7 @@ pub fn show_help(entries: &Rc<RefCell<Vec<Entry>>>) -> String {
         ("/ls [path]", "list directory (capped at 50)"),
         ("/find <name>", "recursive search, max depth 4"),
         ("/web <query>", "DuckDuckGo search in browser"),
-        ("/calc <expr>", "arithmetic: + - * / ( ) unary-"),
+        ("/calc <expr>", "arithmetic: + - * / % ^ ( ) unary-"),
         ("/sys", "hardware diagnostics"),
         ("/help", "this cheat sheet"),
         ("/clear", "clear results pane"),
@@ -684,6 +692,15 @@ mod tests {
     fn formatting() {
         assert_eq!(fmt_num(6.0), "6");
         assert_eq!(fmt_num(2.5), "2.5");
+    }
+
+    #[test]
+    fn modulo() {
+        assert_eq!(calc("10 % 3").unwrap(), 1.0);
+        assert_eq!(calc("100*5 % 7").unwrap(), 3.0); // (100*5) mod 7 = 500 mod 7 = 3
+        assert_eq!(calc("-7 % 3").unwrap(), -1.0);
+        assert!(calc("5 % 0").is_err());
+        assert!(looks_like_math("17 % 5"));
     }
 
     #[test]
