@@ -1,113 +1,154 @@
-# CLDR (Command Line Dispatch & Route)
+<!--
+  CLDR — Command Line Dispatch & Route
+  © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
+  MIT-licensed: THE ABOVE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN
+  ALL COPIES OR SUBSTANTIAL PORTIONS OF THIS SOFTWARE. Removing this watermark
+  is a violation of the license terms.
+-->
 
-> **Minimal, zero-bloat, ultra-low-memory command launcher and background daemon for Windows and Linux.**
+<div align="center">
 
-![Build](https://img.shields.io/github/actions/workflow/status/sohil-momin/cldr/build.yml?label=GitHub%20Build)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-blue)
-![RAM](https://img.shields.io/badge/RAM-%3C10MB-brightgreen)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+<img src="assets/cldr-icon.svg" alt="CLDR icon" width="96"/>
 
-**Author:** Dr. Sohil Momin
-**Language:** Rust 2021 · **UI:** crossterm + ratatui (raw terminal — no Electron, Tauri, Qt, or GTK)
+# ⚡ CLDR — Command Line Dispatch & Route
+
+**A minimal, zero-bloat command launcher that lives in your notification tray and
+summons its command window with a single shortcut.**
+
+[![Build & Release](https://github.com/drsamonline/cldr/actions/workflows/build-release.yml/badge.svg)](https://github.com/drsamonline/cldr/actions/workflows/build-release.yml)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)
+![Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white&style=flat-square)
+![RAM](https://img.shields.io/badge/RAM-%3C10MB-brightgreen?style=flat-square)
+![Binary](https://img.shields.io/badge/dependency-free-single%20binary-informational?style=flat-square)
+[![License: MIT + attribution](https://img.shields.io/badge/license-MIT%20%2B%20attribution-yellow?style=flat-square)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/drsamonline/cldr?include_prereleases&style=flat-square)](https://github.com/drsamonline/cldr/releases)
+
+*by **[Dr. Sohil Momin](https://github.com/drsamonline)** · no Electron · no Tauri · no Qt/GTK · no async runtime*
+
+</div>
 
 ---
 
-## What is CLDR?
+## 📌 What is CLDR?
 
-CLDR is a single-binary, instant-launch terminal command palette. It opens into a raw-mode
-floating interface where every keystroke dispatches directly to the OS: spawn detached
-processes, open files/folders in native viewers, walk bounded file trees, crunch arithmetic
-with a zero-dependency parser, and route anything else intelligently — all while staying
-under 10 MB of RAM.
-
-An optional **background daemon** (`--daemon-start`) keeps a hidden, near-idle worker alive
-to service queued dispatch requests (`open` / `run` / `sys`).
-
-## Command Cheatsheet
-
-| Command            | Description                                                        |
-|--------------------|--------------------------------------------------------------------|
-| `/run <binary>`    | Spawn a process **detached** via the OS shell (`cmd /C start` on Windows, `sh -c … &` on Linux). |
-| `/open <path>`     | Open a file or folder in the system default viewer (`open::that()`). `~` expansion supported. |
-| `/ls [path]`       | Instant non-blocking directory listing, capped at **50 items**, tagged `[DIR]` / `[FILE]`. |
-| `/find <name>`     | Bounded recursive tree walk (`walkdir`, **max depth 4**) matching a filename substring. |
-| `/web <query>`     | Search **DuckDuckGo** in the default browser.                       |
-| `/calc <expr>`     | Deterministic zero-dependency arithmetic: `+ - * /`, parentheses, unary minus. |
-| `/sys`             | Hardware diagnostics: OS family, architecture, CPU core count, hostname, user. |
-| `/help`            | Show the cheat sheet inside the TUI.                                |
-| `/clear`           | Clear the results pane.                                             |
-| *(no prefix)*      | **Smart intent cascade**: try arithmetic → if it's a real path, open it → otherwise web-search it. |
-
-### Key Bindings
-
-| Key          | Action                                   |
-|--------------|------------------------------------------|
-| `Enter`      | Execute the current input                |
-| `Up` / `Down`| Navigate the results list                |
-| `PgUp`/`PgDn`| Jump 10 rows                             |
-| `Home`/`End` | Top / bottom of results                  |
-| `Esc`        | Clean exit — terminal state fully restored |
-
-### Smart Intent Cascade Examples
-
-| You type         | CLDR does                                        |
-|------------------|--------------------------------------------------|
-| `3*(4+2)`        | Evaluates to `18` (arithmetic first)             |
-| `~/Documents`    | Opens the folder in the native file manager      |
-| `rust lifetimes` | Falls back to a DuckDuckGo search                |
-
-## CLI / Daemon Modes
+CLDR is a **single-binary command palette** for Windows and Linux. Launch it from a
+desktop/Start-Menu **shortcut**, and it stays resident **in the background / notification
+tray**. Pressing the shortcut or hotkey again **brings the command window forward**
+instead of opening another copy. Type anything — math, paths, app names, searches — and
+CLDR *routes* it to the right action instantly.
 
 ```text
-cldr                       launch interactive TUI
-cldr --headless "<cmds>"   run without a TTY (newline-separated commands)
-cldr --daemon              run hidden background worker (internal)
-cldr --daemon-start        spawn the background daemon, fully detached
-cldr --daemon-stop         signal a running daemon to shut down
-cldr --daemon-status       report daemon liveness
-cldr --notify "<request>"  queue a request for the daemon (open/run/sys)
-cldr --version             print version
+┌─────────────────────────────  cldr  ─────────────────────────────┐
+│ > 3*(4+2)                                                        │
+│   [CALC] 3*(4+2) = 18                                            │
+│ > code                                                           │
+│   [RUN ] spawned via PATH                                        │
+│ > notes.md                                                       │
+│   [OPEN] notes.md → default editor                               │
+│ Status: ready · C:\Users\you                          by Dr. S. Momin
+└───────────────────────────────────────────────────────────────────┘
 ```
 
-The daemon communicates through small sentinel files under `$XDG_RUNTIME_DIR`
-(`%LOCALAPPDATA%` on Windows), heartbeats every tick, and exits within one second of a stop
-request. Idle footprint is a sleeping thread plus two tiny file writes per tick.
+## ✨ Features
 
-## Build
+| | |
+|---|---|
+| 🚀 **Shortcut-bound launch** | One `.lnk` / `.desktop` entry; re-launching *summons* the existing window |
+| 📴 **Background + tray-resident** | `cldr --tray` runs hidden, keeps the dispatch daemon alive, autostarts on login |
+| 🧠 **Smart routing cascade** | math → existing path → PATH binary → DuckDuckGo web search |
+| 🧮 **Zero-dep calculator** | `+ - * / ( ) unary-minus` parser written from scratch, fully unit-tested |
+| 🪟 **True foreground summon** | Win32 `AttachThreadInput` foreground trick; `xdotool`/`wmctrl` on Linux |
+| 🩺 **Hardware diagnostics** | `/sys` — cores, memory, hostname, user — without spawning tools |
+| 🪶 **Near-idle daemon** | detached worker, sentinel-file IPC, ~0 CPU, <10 MB RSS |
+| 🔒 **Attribution watermark** | every file carries the author notice; stripping it violates the license |
+
+## 🗂️ In-window commands
+
+| Command | Description |
+|---|---|
+| `/run <binary>` | spawn detached via OS shell |
+| `/open <path>` | open file/folder in default viewer |
+| `/ls [path]` | list directory (capped at 50) |
+| `/find <name>` | recursive bounded search (depth 4) |
+| `/web <query>` | DuckDuckGo search in browser |
+| `/calc <expr>` | arithmetic `+ - * / ( ) unary-` |
+| `/sys` | hardware diagnostics |
+| `/help` · `/clear` | cheat sheet · clear pane |
+| *(no prefix)* | auto-route: math → path → PATH app → web |
+
+Full keybindings & behaviour: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**
+
+## 🏁 Quick start
 
 ```bash
+git clone https://github.com/drsamonline/cldr && cd cldr
+cargo build --release                      # one static-ish binary
+./scripts/install-shortcut.sh              # Linux: shortcuts + tray autostart + hotkey
+```
+
+Windows (PowerShell):
+
+```powershell
 cargo build --release
+powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
 ```
 
-The release profile is tuned for size and speed:
+That installer binds three shortcuts: **CLDR** (open window), **CLDR Summon**
+(`--summon`, brings the running window forward), and a hidden **Startup tray entry**
+(`--tray`, runs in background). See **[docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)**.
 
-```toml
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
+## 🧲 How the tray + summon works
+
+```mermaid
+sequenceDiagram
+    participant U as User (shortcut / hotkey)
+    participant S as cldr --summon
+    participant C as Clipboard mailbox
+    participant W as Running window (TUI watcher)
+    U->>S: press shortcut
+    S->>C: post "CLDR-SUMMON:<nonce>"
+    W->>C: poll (~20 Hz)
+    C-->>W: new nonce seen
+    W->>W: raise_window() (Win32 / xdotool)
 ```
 
-Run the binary:
+No sockets, no ports, no privileged APIs — plus a real background daemon
+(`--daemon-start` / `--notify`) for queued `open`/`run`/`sys` requests.
 
-```bash
-./target/release/cldr            # Linux
-.\target\release\cldr.exe        # Windows
+## 📚 Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | complete walkthrough, keys, examples, troubleshooting |
+| [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | build, install, shortcut binding, autostart, releases |
+| [docs/SHORTCUTS.md](docs/SHORTCUTS.md) | per-DE / per-tool hotkey recipes (KDE, GNOME, i3, PowerToys, AHK) |
+| [CHANGELOG.md](CHANGELOG.md) | version history |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | dev workflow, code style, PR rules |
+| [LICENSE](LICENSE) | MIT **with mandatory attribution** |
+
+## 🏗️ Project layout
+
+```text
+src/
+ ├─ main.rs     CLI router (foreground / --summon / --tray / daemon flags)
+ ├─ engine.rs   dispatcher, calc parser, smart cascade (+ unit tests)
+ ├─ tui.rs      ratatui command window + summon watcher wiring
+ ├─ daemon.rs   detached background worker (sentinel-file IPC)
+ └─ summon.rs   tray↔window bridge, Win32/Linux window raising, autostart
+scripts/        shortcut installers (PS1 + sh) and uninstaller
+assets/         tray/app icon
+docs/           user guide, setup guide, shortcut recipes
 ```
 
-## Architecture Notes
+## ⚖️ License & attribution
 
-- **Single-file core engine** (`src/main.rs`) — dispatcher, parser, TUI, and daemon.
-- **Memory ceiling by design**: results scrollback hard-capped at 5,000 rows; `/ls` capped at
-  50 items; `/find` bounded to depth 4 with 50 matches; no async runtime, no GUI framework.
-- **Detached spawning**: children never block or die with the UI.
-- **Clean terminal restoration**: raw mode, alternate screen, mouse capture, and cursor state
-  are always unwound on exit.
+© **2026 Dr. Sohil Momin ([drsamonline](https://github.com/drsamonline))** —
+[MIT licensed with a mandatory attribution clause](LICENSE). Every source, doc,
+script, and asset in this repository carries an embedded watermark; **any copy must
+retain the author's name**. Removing watermarks terminates the license grant.
 
-## License
+<div align="center">
 
-Released under the **MIT License** — see [LICENSE](LICENSE).
+⭐ *Star it if it saves you a keystroke.* — made with ☕ and Rust by **Dr. Sohil Momin**
 
-© 2026 Dr. Sohil Momin
+</div>
