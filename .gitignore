@@ -1,6 +1,2 @@
 # Build artifacts
-dist/
 target/
-
-# Compiled binaries
-*.exe
