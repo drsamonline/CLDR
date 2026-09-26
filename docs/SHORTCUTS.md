@@ -28,10 +28,11 @@ cldr --summon
 
 | State of CLDR | What `--summon` does |
 |---|---|
-| window already open | writes a sentinel to the clipboard mailbox → the running window raises itself to the foreground |
-| no window open | launches a new command window (terminal) |
+| window already open | sends `SUMMON` over the loopback IPC channel → the running window raises itself to the foreground |
+| only tray/daemon running | tray acks `OK-TRAY`; `--summon` then opens a fresh command window |
+| nothing running | launches a new command window (terminal) |
 
-See also the [clipboard-mailbox notes](#clipboard-mailbox-notes).
+See also the [IPC control-channel notes](#ipc-control-channel-notes).
 
 ## Windows
 
@@ -111,18 +112,22 @@ super + alt + c
 | Linux | `~/.config/autostart/cldr-tray.desktop` | background `cldr --tray` at login |
 | Linux | `systemctl --user enable cldr.service` | systemd-managed background daemon |
 
-## Clipboard-mailbox notes
+## IPC control-channel notes
 
-`--summon` communicates with an already-running window by writing a one-time
-sentinel string (`CLDR-SUMMON:<nonce>`) to the clipboard; the window's watcher
-thread consumes it within ~50 ms and restores focus. Consequences:
+Since **v1.2**, `--summon` talks to a running instance over a tiny loopback-TCP
+control channel (`src/ipc.rs`) instead of the old clipboard mailbox:
 
-- If your clipboard manager intercepts every change, it will briefly record the
-  sentinel — harmless, but add `CLDR-SUMMON:` to its exclusion filter if that
-  bothers you.
-- Wayland compositors without `wl-clipboard` support fall back to spawning a new
-  window instead of raising (still functional).
-- On X11, install `xdotool` or `wmctrl` for reliable raise-to-front.
+- The live instance binds an ephemeral port on `127.0.0.1` and publishes
+  `<port> <pid>` in `~/.cldr/port`. Clients connect, send one line
+  (`SUMMON` / `PING`), read one reply (`OK-WINDOW` / `OK-TRAY` / `PONG`).
+- **Your clipboard is never touched again** — no sentinels, no save/restore,
+  no clipboard-manager interference.
+- Stale port files from crashed instances are handled naturally: the TCP
+  connect fails within 250 ms and `--summon` simply opens a fresh window.
+- Nothing ever listens on a non-loopback interface; there is no network
+  exposure and no firewall prompt.
+- On X11, install `xdotool` or `wmctrl` so the acknowledged SUMMON can
+  reliably raise the terminal window to the front.
 
 ---
 

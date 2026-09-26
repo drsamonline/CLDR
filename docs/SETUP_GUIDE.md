@@ -124,7 +124,7 @@ present — a `Super+Alt+C → cldr --summon` hotkey line.
 Two supported residency models (pick one; both are installed by default):
 
 1. **Tray loop (`cldr --tray`)** — a lightweight background process that keeps
-   the daemon alive and watches the clipboard mailbox for summon sentinels.
+   the daemon alive and serves the loopback IPC control channel for summons.
    Started automatically at logon by the Startup folder / XDG autostart entry.
 2. **On-demand daemon (`cldr --daemon-start`)** — detached request worker with
    PID/heartbeat files under `~/.cldr/`. Status: `cldr --daemon-status`,
