@@ -11,6 +11,12 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Publish GitHub release on manual run?'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -50,7 +56,7 @@ jobs:
   release:
     name: Release (${{ matrix.job.name }})
     needs: check
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -78,7 +84,7 @@ jobs:
         with:
           key: ${{ matrix.job.name }}
 
-      # ---- Guard: git tag must match Cargo.toml version --------------------
+      # ---- Guard: git tag must match Cargo.toml version (only when triggered by tag) ----
       - name: Verify tag matches Cargo.toml version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -86,7 +92,7 @@ jobs:
           pkg=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           tag="${GITHUB_REF_NAME#v}"
           if [ "$pkg" != "$tag" ]; then
-            echo "::error::Tag v$tag does not match Cargo.toml version $pkg"
+            echo "::error::Tag v$tag does not match Cargo.toml version$pkg"
             exit 1
           fi
 
@@ -127,13 +133,27 @@ jobs:
             cldr-*.zip
 
   # ---------------------------------------------------------------------------
-  # GitHub Release: attach all binaries when a v* tag is pushed
+  # GitHub Release: attach all binaries when a v* tag is pushed or manually run
   # ---------------------------------------------------------------------------
   publish:
     name: Publish GitHub Release
     needs: release
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine Release Tag
+        id: release_info
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            pkg_ver=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+            echo "tag=v${pkg_ver}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download all release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -143,12 +163,13 @@ jobs:
       - name: Create / update release with binaries
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(steps.release_info.outputs.tag, '-') }}
           generate_release_notes: true
           files: dist/*
           body: |
-            ## CLDR ${{ github.ref_name }}
+            ## CLDR ${{ steps.release_info.outputs.tag }}
 
             Single-binary command launcher with background tray + shortcut summon.
 
