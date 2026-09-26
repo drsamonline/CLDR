@@ -1,2 +1,6 @@
-# Rust build artifacts
+# Build artifacts
+dist/
 target/
+
+# Compiled binaries
+*.exe
