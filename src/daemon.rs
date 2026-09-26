@@ -143,6 +143,11 @@ pub fn ensure_daemon() -> String {
     }
 }
 
+/// True when a graceful stop has been requested via `--daemon-stop`.
+pub fn stop_requested() -> bool {
+    stop_path().exists()
+}
+
 pub fn request_stop() -> std::io::Result<()> {
     fs::create_dir_all(state_dir())?;
     fs::write(stop_path(), "stop")

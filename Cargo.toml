@@ -22,21 +22,13 @@ path = "src/main.rs"
 crossterm = "0.28"
 ratatui = "0.29"
 open = "5.3"
+arboard = "3.4"
 walkdir = "2.5"
-taffy = { version = "0.7", default-features = false } # flexbox layout engine (tray summon window)
 
-# Native tray + summon-window stack: Windows only (Win32 Shell_NotifyIconW,
-# CreateWindowExW). On Linux the tray-resident mode is provided by the
-# X11/Autostart launcher scripts in `scripts/` (see docs/SETUP_GUIDE.md).
-[target.'cfg(windows)'.dependencies]
-muda = "0.6"           # native tray / menu
-tray-icon = "0.19"     # notification-area icon
-tao = "0.34"           # lightweight Win32 event loop + windowing
-windows-sys = { version = "0.59", features = [
-    "Win32_Foundation",
-    "Win32_System_Com",
-    "Win32_UI_Shell",
-] }
+# Notification-tray / summon-clipboard helper: arboard bridges the background
+# tray process and the summoned command window with zero sockets or ports.
+# Native Win32 tray integration + the launch-shortcut installers live in
+# `scripts/` (see docs/SETUP_GUIDE.md).
 
 [profile.release]
 opt-level = 3

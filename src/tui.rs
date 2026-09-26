@@ -7,7 +7,9 @@
 //! ============================================================================
 //!
 //! Interactive terminal UI: raw-mode crossterm + ratatui, bounded scrollback,
-//! blinking-caret ticker, full terminal restoration on exit.
+//! blinking-caret ticker, summon-window watcher (tray → foreground), and full
+//! terminal restoration on exit.
+//! © 2026 Dr. Sohil Momin — attribution watermark retained per license.
 
 use std::cell::RefCell;
 use std::env;
@@ -15,6 +17,7 @@ use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -40,7 +43,7 @@ const POLL_MS: u64 = 16; // ~60 fps UI poll; near-zero idle CPU
 // App state
 // ---------------------------------------------------------------------------
 
-struct App {
+pub struct App {
     input: String,
     cursor_visible: bool,
     entries: Rc<RefCell<Vec<Entry>>>,
@@ -48,6 +51,14 @@ struct App {
     status: String,
     running: bool,
     cwd: PathBuf,
+    /// Set by the summon watcher thread when the tray/hotkey asks us to come forward.
+    pub summoned: Arc<AtomicBool>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl App {
@@ -69,9 +80,21 @@ impl App {
             status: "ready".into(),
             running: true,
             cwd: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            summoned: Arc::new(AtomicBool::new(false)),
         };
         app.jump_bottom();
         app
+    }
+
+    /// Headless entry used by `cldr --exec "<input>"` (shortcut one-shot runs).
+    pub fn dispatch(raw: &str) -> String {
+        let entries = Rc::new(RefCell::new(Vec::<Entry>::new()));
+        let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let status = execute_input(raw, &cwd, &entries);
+        for e in entries.borrow().iter() {
+            println!("[{}] {}", e.kind, e.text);
+        }
+        status
     }
 
     fn submit(&mut self) {
@@ -257,12 +280,16 @@ pub fn run_tui() -> io::Result<()> {
 
 fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
     let mut app = App::new();
-    let blink = Rc::new(AtomicBool::new(false));
-    let b = Rc::clone(&blink);
+    let blink = Arc::new(AtomicBool::new(false));
+    let b = Arc::clone(&blink);
     let blink_handle: JoinHandle<()> = thread::spawn(move || loop {
         thread::sleep(Duration::from_millis(500));
         b.store(true, Ordering::Relaxed);
     });
+
+    // Tray/hotkey summon watcher: raises this terminal window when the
+    // background instance posts a sentinel. Spawned once per session.
+    let _summon_handle = crate::summon::spawn_watcher(&app.summoned);
 
     terminal.draw(|f| app.draw(f))?;
     while app.running {
@@ -274,6 +301,9 @@ fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io:
                 Event::Resize(_, _) => {}
                 _ => {}
             }
+        }
+        if app.summoned.swap(false, Ordering::Relaxed) {
+            app.status = "summoned from tray".into();
         }
         if blink.swap(false, Ordering::Relaxed) {
             app.cursor_visible = !app.cursor_visible;
