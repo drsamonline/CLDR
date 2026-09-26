@@ -1,11 +1,18 @@
+# CLDR — Command Line Dispatch & Route
+# © 2026 Dr. Sohil Momin. MIT licensed — attribution watermark required on copies.
 [package]
 name = "cldr"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["Dr. Sohil Momin"]
-description = "CLDR - Command Line Dispatch & Route. Minimal, zero-bloat command launcher and background daemon for Windows and Linux."
+description = "CLDR - Command Line Dispatch & Route. Minimal, zero-bloat command launcher with a background tray-resident summon window for Windows and Linux."
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/drsamonline/cldr"
+homepage = "https://github.com/drsamonline/cldr"
+documentation = "https://github.com/drsamonline/cldr/blob/main/docs/USER_GUIDE.md"
+keywords = ["launcher", "palette", "tray", "hotkey", "cli"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "cldr"
@@ -15,7 +22,13 @@ path = "src/main.rs"
 crossterm = "0.28"
 ratatui = "0.29"
 open = "5.3"
+arboard = "3.4"
 walkdir = "2.5"
+
+# Notification-tray / summon-clipboard helper: arboard bridges the background
+# tray process and the summoned command window with zero sockets or ports.
+# Native Win32 tray integration + the launch-shortcut installers live in
+# `scripts/` (see docs/SETUP_GUIDE.md).
 
 [profile.release]
 opt-level = 3

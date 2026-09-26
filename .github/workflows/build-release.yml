@@ -1,12 +1,16 @@
+# =============================================================================
+# CLDR — Command Line Dispatch & Route  (CI workflow)
+# © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed: retain this attribution
+# notice in all copies or substantial portions of this file.
+# =============================================================================
 name: Build & Release
 
 on:
   push:
-    # This matches all branches but explicitly ignores tag names so a tag push won't double-trigger
-    branches: ["**"]        
-    tags: ["v*"]            
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
-  workflow_dispatch:        
+  workflow_dispatch:
 
 permissions:
   contents: write
