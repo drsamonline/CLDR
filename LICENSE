@@ -1,6 +1,6 @@
-MIT License
+MIT License — with mandatory attribution notice
 
-Copyright (c) 2026 Dr. Sohil Momin
+Copyright (c) 2026 Dr. Sohil Momin (drsamonline)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -9,8 +9,11 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice, the author attribution "Dr. Sohil Momin", and the
+attribution watermarks embedded in every source file of the Software MUST be
+included in all copies or substantial portions of the Software. Removing,
+obscuring, or editing these watermarks constitutes a violation of this
+license and terminates the rights granted herein.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
