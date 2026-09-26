@@ -14,6 +14,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-26
+
+### Added
+- **A1 — In-process IPC control channel** (`src/ipc.rs`): loopback-TCP
+  summon/PING protocol (`SUMMON`, `PING` → `OK-WINDOW`, `OK-TRAY`, `PONG`)
+  with port+PID rendezvous at `~/.cldr/port`. Zero new crates (`std::net`).
+- **A3 — Single-instance guard**: launching `cldr` while a window is live
+  now summons that window and exits in <50 ms instead of spawning a
+  duplicate (RAM + tray sanity).
+- Richer `--daemon-status`: reports daemon *and* window liveness
+  (`[daemon alive · window live]`).
+- Two new unit tests covering the IPC round-trip and error replies
+  (8 tests total, all passing).
+
+### Changed
+- `--summon` routes through the IPC channel; if only the tray answers
+  (`OK-TRAY`) or nobody answers, a fresh command window is opened.
+- The TUI registers as a *window instance* so SUMMON acks carry raise-focus
+  semantics; deregisters its rendezvous file on clean exit.
+- Docs updated to describe the IPC architecture (README sequence diagram,
+  SHORTCUTS "IPC control-channel notes", SETUP_GUIDE, USER_GUIDE).
+
+### Removed
+- **Clipboard mailbox deleted entirely** — the app no longer reads or writes
+  your clipboard ever again (privacy + reliability win).
+- Dropped the `arboard` dependency (~−40 KB transitive weight; binary stays
+  ~830 KB stripped).
+
 ## [1.1.0] — 2026-09-26
 
 ### Added

@@ -103,17 +103,22 @@ That installer binds three shortcuts: **CLDR** (open window), **CLDR Summon**
 sequenceDiagram
     participant U as User (shortcut / hotkey)
     participant S as cldr --summon
-    participant C as Clipboard mailbox
-    participant W as Running window (TUI watcher)
+    participant I as Loopback IPC (127.0.0.1, ~/.cldr/port)
+    participant W as Running window (TUI server thread)
     U->>S: press shortcut
-    S->>C: post "CLDR-SUMMON:<nonce>"
-    W->>C: poll (~20 Hz)
-    C-->>W: new nonce seen
+    S->>I: connect, send "SUMMON"
+    I->>W: accept, reply "OK-WINDOW"
     W->>W: raise_window() (Win32 / xdotool)
+    S-->>U: exits (no new window spawned)
 ```
 
-No sockets, no ports, no privileged APIs — plus a real background daemon
+Loopback-only TCP control channel — **zero clipboard interference**, no
+privileged APIs, no firewall exposure — plus a real background daemon
 (`--daemon-start` / `--notify`) for queued `open`/`run`/`sys` requests.
+
+> **v1.2:** the summon path moved from a clipboard mailbox to this IPC channel —
+> your clipboard is never touched again, and re-launching the shortcut while a
+> window is open simply raises it (single-instance guard).
 
 ## 📚 Documentation
 

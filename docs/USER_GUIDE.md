@@ -93,7 +93,7 @@ Use `--exec` to build extra one-shot shortcuts (e.g. a desktop icon that runs
 
 | Symptom | Fix |
 |---|---|
-| Summon does nothing | ensure a CLDR window is actually running; check clipboard manager isn't eating the sentinel (see [SHORTCUTS.md](SHORTCUTS.md#clipboard-mailbox)) |
+| Summon does nothing | ensure a CLDR window is actually running; stale `~/.cldr/port` files self-heal via the 250 ms connect timeout (see [SHORTCUTS.md](SHORTCUTS.md#ipc-control-channel-notes)) |
 | Hotkey dead on Linux | no `sxhkd`? bind manually in KDE/GNOME settings to `cldr --summon` ([recipes](SHORTCUTS.md)) |
 | Garbled terminal after crash | run `reset` — CLDR always restores on clean exit (`Esc`) |
 | Daemon won't start | check `$XDG_RUNTIME_DIR/cldr-daemon/daemon.log` (Linux) or `%TEMP%\cldr-daemon\daemon.log` |
