@@ -1,11 +1,18 @@
+# CLDR — Command Line Dispatch & Route
+# © 2026 Dr. Sohil Momin. MIT licensed — attribution watermark required on copies.
 [package]
 name = "cldr"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["Dr. Sohil Momin"]
-description = "CLDR - Command Line Dispatch & Route. Minimal, zero-bloat command launcher and background daemon for Windows and Linux."
+description = "CLDR - Command Line Dispatch & Route. Minimal, zero-bloat command launcher with a background tray-resident summon window for Windows and Linux."
 license = "MIT"
 readme = "README.md"
+repository = "https://github.com/drsamonline/cldr"
+homepage = "https://github.com/drsamonline/cldr"
+documentation = "https://github.com/drsamonline/cldr/blob/main/docs/USER_GUIDE.md"
+keywords = ["launcher", "palette", "tray", "hotkey", "cli"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "cldr"
@@ -16,6 +23,20 @@ crossterm = "0.28"
 ratatui = "0.29"
 open = "5.3"
 walkdir = "2.5"
+taffy = { version = "0.7", default-features = false } # flexbox layout engine (tray summon window)
+
+# Native tray + summon-window stack: Windows only (Win32 Shell_NotifyIconW,
+# CreateWindowExW). On Linux the tray-resident mode is provided by the
+# X11/Autostart launcher scripts in `scripts/` (see docs/SETUP_GUIDE.md).
+[target.'cfg(windows)'.dependencies]
+muda = "0.6"           # native tray / menu
+tray-icon = "0.19"     # notification-area icon
+tao = "0.34"           # lightweight Win32 event loop + windowing
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+] }
 
 [profile.release]
 opt-level = 3
