@@ -7,9 +7,6 @@
 //!   * `/`-prefixed dispatcher (run/open/ls/find/web/calc/sys)
 //!   * Smart intent cascade for un-prefixed input
 //!   * Detached process spawning, native OS dispatch via `open`
-//!   * Single-instance guard: re-launching the shortcut/detached instance
-//!     foregrounds the existing console window instead of opening a second one
-//!     (Win32 `FindWindowW`/`ShowWindow`/`SetForegroundWindow`, POSIX `SIGUSR1`)
 //!   * Optional headless mode (`cldr --headless`) and hidden daemon
 
 use std::cell::RefCell;
@@ -21,7 +18,7 @@ use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::{self};
+use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crossterm::event::{
@@ -784,219 +781,12 @@ fn daemon_notify(request: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Single-instance guard: shortcut re-launch foregrounds the existing window
-// ---------------------------------------------------------------------------
-
-/// Window title used by both the primary instance and any wake-up attempt,
-/// so a second launch of the shortcut can locate and raise the first one.
-#[cfg_attr(not(windows), allow(dead_code))] // referenced by the Win32 foreground path
-const WINDOW_TITLE: &str = "CLDR — Command Line Dispatch & Route";
-
-#[cfg(windows)]
-mod win_single {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
-    type HWND = isize;
-    type HANDLE = isize;
-    type DWORD = u32;
-    type BOOL = i32;
-
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn CreateMutexW(lpmutexattributes: usize, binitialowner: BOOL, lpname: *const u16) -> HANDLE;
-        fn GetLastError() -> DWORD;
-        fn CloseHandle(hobject: HANDLE) -> BOOL;
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn FindWindowW(lpclassname: *const u16, lpwindowname: *const u16) -> HWND;
-        fn ShowWindow(hwnd: HWND, ncmdshow: i32) -> BOOL;
-        fn SetForegroundWindow(hwnd: HWND) -> BOOL;
-    }
-
-    const ERROR_ALREADY_EXISTS: DWORD = 183;
-    const SW_RESTORE: i32 = 9;
-
-    fn wide(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
-    }
-
-    /// Acquire the named mutex for this desktop session. `Ok(true)` means this
-    /// process is the primary instance; `Ok(false)` means another instance owns it.
-    pub fn acquire_primary_lock() -> Result<bool, String> {
-        let name = wide("Local\\cldr-single-instance");
-        let handle = unsafe { CreateMutexW(0, 1, name.as_ptr()) };
-        if handle == -1 {
-            return Err(format!("CreateMutexW failed (gle={})", unsafe { GetLastError() }));
-        }
-        let owned = unsafe { GetLastError() } != ERROR_ALREADY_EXISTS;
-        if !owned {
-            // Not ours — release our handle; the owner keeps its mutex alive.
-            unsafe { CloseHandle(handle) };
-        }
-        // Intentionally leak `handle` when owned: the mutex must live for the
-        // entire process lifetime so re-launches detect us.
-        Ok(owned)
-    }
-
-    /// Best-effort: restore + foreground the console window of the running
-    /// primary instance. Returns true if a window was found and raised.
-    pub fn foreground_existing(title: &str) -> bool {
-        let t = wide(title);
-        let hwnd = unsafe { FindWindowW(std::ptr::null(), t.as_ptr()) };
-        if hwnd == 0 {
-            return false;
-        }
-        unsafe {
-            ShowWindow(hwnd, SW_RESTORE);
-            SetForegroundWindow(hwnd);
-        }
-        true
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct InstanceGuard {
-    pub is_primary: bool,
-}
-
-impl InstanceGuard {
-    /// Try to become the single running interactive instance. On success this
-    /// also sets the console window title so future launches can find us.
-    pub fn acquire() -> Self {
-        #[cfg(windows)]
-        {
-            crossterm::terminal::SetTitleFormat(WINDOW_TITLE).ok();
-            match win_single::acquire_primary_lock() {
-                Ok(primary) => InstanceGuard { is_primary: primary },
-                // If the OS lock fails, prefer running over refusing to run.
-                Err(_) => InstanceGuard { is_primary: true },
-            }
-        }
-        #[cfg(not(windows))]
-        {
-            InstanceGuard { is_primary: posix_acquire_lock() }
-        }
-    }
-
-    /// Called by a *second* launch: wake the primary instance's window and
-    /// return true if the hand-off succeeded.
-    pub fn wake_existing() -> bool {
-        #[cfg(windows)]
-        {
-            win_single::foreground_existing(WINDOW_TITLE)
-        }
-        #[cfg(not(windows))]
-        {
-            posix_wake_existing()
-        }
-    }
-}
-
-#[cfg(unix)]
-fn posix_lock_path() -> PathBuf {
-    env::var("TMPDIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"))
-        .join("cldr-single-instance.lock")
-}
-
-#[cfg(unix)]
-fn posix_pid_path() -> PathBuf {
-    posix_lock_path().with_extension("pid")
-}
-
-#[cfg(unix)]
-fn posix_already_running(pid: u32) -> bool {
-    if pid == 0 || pid == std::process::id() {
-        return pid == std::process::id();
-    }
-    process_alive(pid)
-}
-
-/// POSIX single-instance guard: flock on a shared lock file + PID registry.
-/// A stale lock (holder died) is transparently replaced by the new launch.
-#[cfg(unix)]
-fn posix_acquire_lock() -> bool {
-    use std::os::unix::io::AsRawFd;
-
-    let path = posix_lock_path();
-    let file = match fs::OpenOptions::new().create(true).truncate(false).write(true).open(&path) {
-        Ok(f) => f,
-        Err(_) => return true, // fail-open: better a duplicate than a refusal
-    };
-    let rc = unsafe { flock(file.as_raw_fd(), /*LOCK_EX|LOCK_NB*/ 2 | 4) };
-    if rc != 0 {
-        // Lock held elsewhere: verify the recorded PID is really alive before
-        // declaring "already running" (guards against leftover pid files).
-        let alive = fs::read_to_string(posix_pid_path())
-            .ok()
-            .and_then(|s| s.trim().parse::<u32>().ok())
-            .map(posix_already_running)
-            .unwrap_or(false);
-        drop(file);
-        return !alive;
-    }
-    // Lock acquired — reclaim ownership even if a dead holder left a pid file.
-    let _ = file.set_len(0);
-    let _ = fs::write(posix_pid_path(), std::process::id().to_string());
-    std::mem::forget(file); // keep the fd (and thus the lock) open for our lifetime
-    set_wake_handler();
-    true
-}
-
-#[cfg(unix)]
-fn posix_wake_existing() -> bool {
-    extern "C" {
-        fn kill(pid: i32, sig: i32) -> i32;
-    }
-    const SIGUSR1: i32 = 10;
-    match fs::read_to_string(posix_pid_path())
-        .ok()
-        .and_then(|s| s.trim().parse::<u32>().ok())
-    {
-        Some(pid) if pid != 0 && process_alive(pid) => {
-            unsafe { kill(pid as i32, SIGUSR1) == 0 }
-        }
-        _ => false,
-    }
-}
-
-#[cfg(unix)]
-extern "C" {
-    fn flock(fd: i32, operation: i32) -> i32;
-}
-
-#[cfg(unix)]
-fn set_wake_handler() {
-    use std::sync::Once;
-    static INIT: Once = Once::new();
-    INIT.call_once(|| {
-        extern "C" {
-            fn signal(sig: i32, handler: usize) -> usize;
-        }
-        const SIGUSR1: i32 = 10;
-        unsafe {
-            signal(SIGUSR1, wake_handler as *const () as usize);
-        }
-    });
-}
-
-extern "C" fn wake_handler(_sig: i32) {
-    // Signal-safe: just flip the flag; the event loop restores the terminal.
-    WAKE_FLAG.store(true, Ordering::Relaxed);
-}
-
-static WAKE_FLAG: AtomicBool = AtomicBool::new(false);
-
-// ---------------------------------------------------------------------------
 // TUI application
 // ---------------------------------------------------------------------------
 
 struct App {
     input: String,
+    cursor_visible: bool,
     entries: Rc<RefCell<Vec<Entry>>>,
     list_state: ListState,
     status: String,
@@ -1017,6 +807,7 @@ impl App {
         push(&entries, Entry::new("INFO", "press /help for the command cheat sheet · Esc quits"));
         let mut app = Self {
             input: String::new(),
+            cursor_visible: true,
             entries,
             list_state: ListState::default(),
             status: "ready".into(),
@@ -1104,9 +895,11 @@ impl App {
             .title(format!(" {APP_NAME} ▸ {APP_TAGLINE} "))
             .title_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
             .border_style(Style::default().fg(Color::DarkGray));
+        let cursor = if self.cursor_visible { "▏" } else { " " };
         let para = Paragraph::new(Line::from(vec![
             Span::styled("> ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
             Span::styled(self.input.clone(), Style::default().fg(Color::White)),
+            Span::styled(cursor.to_string(), Style::default().fg(Color::Yellow)),
         ]))
         .block(block);
         f.render_widget(para, area);
@@ -1223,8 +1016,6 @@ fn main() {
         }
         Some("--daemon") => {
             // Hidden background worker: no terminal, bounded memory, tiny binary.
-            // Deliberately bypasses the single-instance guard so it can coexist
-            // with an interactive session.
             let stop = Arc::new(AtomicBool::new(false));
             install_stop_flag(Arc::clone(&stop));
             run_daemon_loop(&stop);
@@ -1256,20 +1047,6 @@ fn main() {
             return;
         }
         _ => {}
-    }
-
-    // Interactive launch: honour the single-instance contract. If another
-    // instance already owns the lock, foreground *its* window instead of
-    // starting a second one (the "shortcut re-open" behaviour).
-    let guard = InstanceGuard::acquire();
-    if !guard.is_primary {
-        if InstanceGuard::wake_existing() {
-            print_banner_line("existing instance foregrounded — not opening a second window");
-            return;
-        }
-        eprintln!("{APP_NAME}: another instance is running but its window could not be raised.");
-        eprintln!("(close it first, or use --headless for scripted execution)");
-        std::process::exit(1);
     }
 
     if let Err(e) = run_tui() {
@@ -1304,6 +1081,7 @@ fn run_tui() -> io::Result<()> {
     // `Terminal::new` takes ownership of the backend; the terminal is fully
     // restored in `cleanup()` when the event loop finishes.
     let mut terminal = ratatui::Terminal::new(backend)?;
+    let _ = terminal.hide_cursor();
     let result = event_loop(&mut terminal);
     cleanup();
     result
@@ -1321,6 +1099,13 @@ fn cleanup() {
 
 fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
     let mut app = App::new();
+    let ticker = Arc::new(AtomicBool::new(false));
+    let t = Arc::clone(&ticker);
+    let blink_handle: JoinHandle<()> = thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(500));
+        t.store(true, Ordering::Relaxed);
+    });
+
     terminal.draw(|f| app.draw(f))?;
     while app.running {
         if event::poll(Duration::from_millis(POLL_MS))? {
@@ -1332,25 +1117,13 @@ fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io:
                 _ => {}
             }
         }
-        // Re-launch shortcut hand-off: a second process sent us SIGUSR1 —
-        // repaint and take back the foreground cleanly.
-        if WAKE_FLAG.swap(false, Ordering::Relaxed) {
-            app.status = "window foregrounded".into();
+        if ticker.swap(false, Ordering::Relaxed) {
+            app.cursor_visible = !app.cursor_visible;
         }
         terminal.draw(|f| app.draw(f))?;
-        position_real_cursor(terminal, &app)?;
     }
+    drop(blink_handle);
     Ok(())
-}
-
-/// Park the native terminal cursor at the end of the input line so text
-/// editors' muscle memory keeps working (no fake blink thread needed).
-fn position_real_cursor<B: ratatui::backend::Backend>(
-    terminal: &mut ratatui::Terminal<B>,
-    app: &App,
-) -> io::Result<()> {
-    let x = 2 + app.input.chars().count().min(120) as u16;
-    terminal.set_cursor_position((x.min(terminal.size()?.width.saturating_sub(2)), 1))
 }
 
 /// Best-effort graceful shutdown hook for the daemon (Ctrl+C / SIGTERM aware).
