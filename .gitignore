@@ -1,4 +1,4 @@
 # CLDR repository ignore rules
 # © 2026 Dr. Sohil Momin (drsamonline). MIT licensed — retain this attribution.
 # Build artifacts
-target/
+target//target/
