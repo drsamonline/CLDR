@@ -26,6 +26,7 @@
 
 mod daemon;
 mod engine;
+mod ipc;
 mod summon;
 mod tui;
 
@@ -62,7 +63,16 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match args.first().map(String::as_str) {
-        None => run_foreground_tui(),
+        None => {
+            // A3: single-instance guard — if a live window already exists,
+            // summon it instead of spawning a duplicate (saves RAM + tray
+            // sanity). The second launch exits in <50 ms.
+            if ipc::request_summon() {
+                eprintln!("[{APP_NAME}] summoned existing window (single-instance guard)");
+                return;
+            }
+            run_foreground_tui();
+        }
         Some("--help") | Some("-h") => {
             println!("{HELP}");
         }
@@ -73,13 +83,14 @@ fn main() {
             );
         }
         Some("--summon") => {
-            // Post the summon sentinel; any live CLDR window raises itself.
-            // If none exists, this shortcut launch simply opens a new window.
-            let posted = summon::request_summon();
-            if !posted {
-                eprintln!("[WARN] clipboard unavailable for summon signal");
+            // A1: route SUMMON over the loopback IPC control channel to any
+            // live *visible* CLDR window. The tray process answers PING but
+            // owns no window, so we distinguish: OK-window → done; PONG-only
+            // (tray) or nobody → spawn a fresh command window ourselves.
+            match ipc::send_cmd(ipc::CMD_SUMMON).as_deref() {
+                Some(ipc::REPLY_OK_WINDOW) => {}
+                _ => run_foreground_tui(),
             }
-            run_foreground_tui();
         }
         Some("--tray") => {
             let stop = Arc::new(AtomicBool::new(false));
@@ -98,10 +109,9 @@ fn main() {
             Err(e) => eprintln!("[ERR] stop failed: {e}"),
         },
         Some("--daemon-status") => {
-            println!(
-                "[{}]",
-                if daemon::daemon_is_alive() { "daemon alive" } else { "daemon stopped" }
-            );
+            let d = if daemon::daemon_is_alive() { "daemon alive" } else { "daemon stopped" };
+            let w = if ipc::ping_instance() { "window live" } else { "no window" };
+            println!("[{d} · {w}]");
         }
         Some("--notify") => {
             let req = args.get(1).cloned().unwrap_or_else(|| "sys".into());

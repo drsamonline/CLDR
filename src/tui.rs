@@ -287,9 +287,10 @@ fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io:
         b.store(true, Ordering::Relaxed);
     });
 
-    // Tray/hotkey summon watcher: raises this terminal window when the
-    // background instance posts a sentinel. Spawned once per session.
-    let _summon_handle = crate::summon::spawn_watcher(&app.summoned);
+    // A1: loopback IPC control channel — `cldr --summon`, tray clicks and
+    // hotkeys connect here; SUMMON raises our window and wakes the redraw.
+    crate::ipc::declare_window_instance();
+    let _ipc_handle = crate::ipc::spawn_server(&app.summoned);
 
     terminal.draw(|f| app.draw(f))?;
     while app.running {
@@ -311,6 +312,9 @@ fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io:
         terminal.draw(|f| app.draw(f))?;
     }
     drop(blink_handle);
+    // A1: deregister the loopback rendezvous so future launches open a fresh
+    // window instead of summoning this dead one.
+    crate::ipc::unregister();
     // Enforce the documented scrollback ceiling invariant on shutdown.
     let _ = SCROLLBACK_CAP;
     Ok(())

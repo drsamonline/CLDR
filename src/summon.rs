@@ -6,98 +6,23 @@
 //! watermark is a violation of the license terms.
 //! ============================================================================
 //!
-//! Summon bridge between the background (notification-tray) process and the
-//! command window. Zero sockets, zero ports, zero dependencies beyond arboard:
+//! OS window raising + background (notification-tray) loop.
 //!
-//!   tray hotkey / tray click / `cldr` (relaunch of the shortcut)
-//!        │  writes sentinel "CLDR-SUMMON:<nonce>" to the system clipboard
-//!        ▼
-//!   running TUI polls the clipboard every tick (~16 ms)
-//!        │  sees the nonce → restores/focuses its terminal window
-//!        ▼
-//!   OS-specific foreground call (Win32 AttachThreadInput trick on Windows,
-//!   xdotool/wmctrl best-effort on Linux)
+//! Since v1.2 the summon *signal* itself travels over the tiny loopback-TCP
+//! control channel in `ipc.rs` (A1 enhancement) — this module no longer
+//! touches the clipboard at all. What remains here is deliberately minimal:
 //!
-//! The clipboard is only used as a tiny one-way mailbox; the previous
-//! clipboard content is saved and restored around every write.
+//!   * raise_window()  — un-minimise + foreground our console/terminal,
+//!                       Win32 AttachThreadInput trick / Linux xdotool-wmctrl
+//!   * run_tray_loop() — dependency-free background residency: installs the
+//!                       autostart launch shortcut and keeps the daemon alive
+//!   * ensure_autostart_entry() — XDG autostart / Startup-folder binding
 
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-pub const SENTINEL_PREFIX: &str = "CLDR-SUMMON:";
-
-static SUMMON_SEQ: AtomicU64 = AtomicU64::new(0);
-
-fn now_nonce() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let seq = SUMMON_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("{secs}-{seq}")
-}
-
-// ---------------------------------------------------------------------------
-// Clipboard mailbox helpers (never panic: tray/TUI must survive clipboard issues)
-// ---------------------------------------------------------------------------
-
-fn clip_get() -> Option<String> {
-    arboard::Clipboard::new()
-        .ok()
-        .and_then(|mut c| c.get_text().ok())
-}
-
-fn clip_set(text: &str) -> bool {
-    match arboard::Clipboard::new() {
-        Ok(mut c) => c.set_text(text.to_string()).is_ok(),
-        Err(_) => false,
-    }
-}
-
-/// Ask a *running* instance to bring its command window forward.
-/// Returns true if the summon sentinel was successfully posted.
-pub fn request_summon() -> bool {
-    // Preserve the user's clipboard: save → write sentinel → restore later.
-    let saved = clip_get();
-    let ok = clip_set(&format!("{SENTINEL_PREFIX}{}", now_nonce()));
-    if let Some(s) = saved {
-        // Give the target poller a moment to consume the sentinel first.
-        thread::sleep(Duration::from_millis(120));
-        let _ = clip_set(&s);
-    }
-    ok
-}
-
-// ---------------------------------------------------------------------------
-// TUI-side watcher
-// ---------------------------------------------------------------------------
-
-/// Spawn a daemon thread that watches the clipboard for fresh summon sentinels.
-/// On detection it raises the console/terminal window and flips `flag` so the
-/// main loop can re-render immediately.
-pub fn spawn_watcher(flag: &Arc<AtomicBool>) -> thread::JoinHandle<()> {
-    let flag = Arc::clone(flag);
-    thread::spawn(move || {
-        let mut last_seen: Option<String> = None;
-        loop {
-            if let Some(txt) = clip_get() {
-                if let Some(nonce) = txt.strip_prefix(SENTINEL_PREFIX) {
-                    let nonce = nonce.trim().to_string();
-                    if !nonce.is_empty() && Some(&nonce) != last_seen.as_ref() {
-                        last_seen = Some(nonce);
-                        raise_window();
-                        flag.store(true, Ordering::Relaxed);
-                    }
-                }
-            }
-            thread::sleep(Duration::from_millis(50)); // ~20 Hz: near-zero idle cost
-        }
-    })
-}
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
 // OS window raising
@@ -159,7 +84,6 @@ pub fn raise_window() {
     #[cfg(windows)]
     {
         win::raise_console();
-        return;
     }
     #[cfg(not(windows))]
     {
@@ -241,12 +165,12 @@ fn linux_raise() {
 fn log_line(msg: &str) {
     if let Ok(p) = std::env::var("CLDR_TRAY_LOG") {
         if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(p) {
-            let _ = writeln!(f, "[{}] {msg}", chrono_like_now());
+            let _ = writeln!(f, "[{}] {msg}", epoch_now());
         }
     }
 }
 
-fn chrono_like_now() -> String {
+fn epoch_now() -> String {
     let s = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -257,24 +181,29 @@ fn chrono_like_now() -> String {
 /// Tray-resident background loop. Kept intentionally dependency-free:
 /// - installs an XDG autostart entry (Linux) / reports the Startup-folder
 ///   path (Windows) so the shortcut survives reboots,
-/// - registers the summon hotkey when a hotkey daemon is available
-///   (`sxhkd`/`hyperref` on Linux; Win+Alt+C via AutoHotKey script on Windows —
-///   see `scripts/`),
-/// - then idles: services clipboard summons itself (so a tray click from the
-///   installer scripts works) and keeps the daemon alive.
+/// - serves the loopback IPC control channel (`ipc::spawn_server`) so tray
+///   clicks / hotkeys / `cldr --summon` can route into a live window,
+/// - then idles, keeping the dispatch daemon alive.
 pub fn run_tray_loop(stop: &AtomicBool) {
     log_line("tray: started");
     ensure_autostart_entry();
+    let flag = std::sync::Arc::new(AtomicBool::new(false));
+    let _srv = crate::ipc::spawn_server(&flag);
     while !stop.load(Ordering::Relaxed) {
         ensure_daemon_alive();
-        // Sleep in 1s quanta for prompt shutdown.
+        // Consume any forwarded-summon notifications logged by handle_conn.
+        if flag.swap(false, Ordering::Relaxed) {
+            log_line("tray: summon routed to live window");
+        }
+        // Sleep in ~1s quanta for prompt shutdown.
         for _ in 0..30 {
             if stop.load(Ordering::Relaxed) {
                 break;
             }
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_millis(333));
         }
     }
+    crate::ipc::unregister();
     log_line("tray: stopped");
 }
 
@@ -324,21 +253,5 @@ pub fn ensure_autostart_entry() {
         );
         let _ = std::fs::write(&desktop, contents);
         log_line(&format!("tray: wrote autostart {}", desktop.display()));
-    }
-}
-
-/// Convenience for tests/manual runs: block until a summon arrives or timeout.
-#[allow(dead_code)]
-pub fn wait_for_summon(timeout: Duration) -> bool {
-    let start = Instant::now();
-    let seen = clip_get().map(|t| t.starts_with(SENTINEL_PREFIX));
-    loop {
-        if matches!(seen, Some(true)) {
-            return true;
-        }
-        if start.elapsed() > timeout {
-            return false;
-        }
-        thread::sleep(Duration::from_millis(50));
     }
 }

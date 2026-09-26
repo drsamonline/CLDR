@@ -91,7 +91,7 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, String> {
                 let v: f64 = word.parse().map_err(|_| format!("bad number '{word}'"))?;
                 toks.push(Tok::Num(v));
             }
-            '+' | '-' | '*' | '/' => {
+            '+' | '-' | '*' | '/' | '^' => {
                 toks.push(Tok::Op(c));
                 i += 1;
             }
@@ -164,7 +164,9 @@ impl Parser {
         Ok(v)
     }
 
-    // factor := ('-'|'+') factor | '(' expr ')' | Number
+    // factor := ('-'|'+') factor | power
+    // power  := atom ('^' power)?          (right-associative)
+    // atom   := '(' expr ')' | Number
     fn eval_factor(&mut self) -> Result<f64, String> {
         match self.peek().cloned() {
             Some(Tok::Op('-')) => {
@@ -175,6 +177,23 @@ impl Parser {
                 self.bump();
                 self.eval_factor()
             }
+            _ => self.eval_power(),
+        }
+    }
+
+    fn eval_power(&mut self) -> Result<f64, String> {
+        let base = self.eval_atom()?;
+        if matches!(self.peek(), Some(Tok::Op('^'))) {
+            self.bump();
+            let exp = self.eval_factor()?; // right-associative, allows -x exponent
+            Ok(base.powf(exp))
+        } else {
+            Ok(base)
+        }
+    }
+
+    fn eval_atom(&mut self) -> Result<f64, String> {
+        match self.peek().cloned() {
             Some(Tok::LParen) => {
                 self.bump();
                 let v = self.eval_expr()?;
@@ -647,9 +666,18 @@ mod tests {
     #[test]
     fn math_detection() {
         assert!(looks_like_math("3 * (4 + 2)"));
+        assert!(looks_like_math("2^10"));
         assert!(!looks_like_math("hello world"));
         assert!(!looks_like_math("C:\\Users"));
         assert!(!looks_like_math(""));
+    }
+
+    #[test]
+    fn exponentiation() {
+        assert_eq!(calc("2^10").unwrap(), 1024.0);
+        assert_eq!(calc("2^3^2").unwrap(), 512.0); // right-associative
+        assert_eq!(calc("2^-1").unwrap(), 0.5);
+        assert_eq!(calc("1 + 2^3 * 2").unwrap(), 17.0);
     }
 
     #[test]
