@@ -21,7 +21,7 @@ CLDR has **three cooperating pieces**:
 |---|---|---|---|
 | **Command window** | *(none)* / `--summon` | your terminal | interactive palette (type → route) |
 | **Tray resident** | `--tray` | background, notification area | keeps everything alive, autostarts, respawns daemon |
-| **Dispatch daemon** | `--daemon-start` | detached worker | services queued `open`/`run`/`sys` requests |
+| **Dispatch daemon** | `--daemon-start` | detached worker | services queued `open`/`run`/`sys` requests from durable per-request files |
 
 You normally never touch the daemon directly — the shortcut installer wires all three up.
 
