@@ -122,8 +122,11 @@ control channel (`src/ipc.rs`) instead of the old clipboard mailbox:
   (`SUMMON` / `PING`), read one reply (`OK-WINDOW` / `OK-TRAY` / `PONG`).
 - **Your clipboard is never touched again** — no sentinels, no save/restore,
   no clipboard-manager interference.
-- Stale port files from crashed instances are handled naturally: the TCP
-  connect fails within 250 ms and `--summon` simply opens a fresh window.
+- Stale port files are self-healing: a dead recorded PID is discarded before a
+  connection is attempted. If a PID was reused but its recorded port is
+  unreachable, the one 250 ms connection attempt clears that record. Cleanup
+  verifies the original `<port> <pid>` pair first, so it cannot remove a newer
+  instance's rendezvous entry.
 - Nothing ever listens on a non-loopback interface; there is no network
   exposure and no firewall prompt.
 - On X11, install `xdotool` or `wmctrl` so the acknowledged SUMMON can
