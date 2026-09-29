@@ -25,6 +25,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -85,6 +86,20 @@ fn remove_port_file() {
     }
 }
 
+/// Remove a rendezvous record only when it has not been replaced by another
+/// instance since the caller read it.
+fn remove_port_file_if_matches(port: u16, pid: u32) {
+    if let Some(p) = port_file() {
+        let expected = format!("{port} {pid}");
+        if std::fs::read_to_string(&p)
+            .ok()
+            .is_some_and(|text| text.trim() == expected)
+        {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
 /// Read the published `(port, pid)` pair, if any.
 fn read_port_file() -> Option<(u16, u32)> {
     let txt = std::fs::read_to_string(port_file()?).ok()?;
@@ -94,13 +109,33 @@ fn read_port_file() -> Option<(u16, u32)> {
     Some((port, pid))
 }
 
-/// Best-effort process liveness check so stale port files never misroute.
+/// Best-effort process liveness check so stale port files are discarded
+/// immediately instead of forcing every later launch to wait for a timeout.
+#[cfg(unix)]
+fn pid_alive(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn pid_alive(pid: u32) -> bool {
+    Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+        .stdin(Stdio::null())
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()))
+        .unwrap_or(false)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn pid_alive(_pid: u32) -> bool {
-    // The PID recorded in the port file is owned by whoever published it, so
-    // it always refers to *some* live process record. A stale CLDR instance
-    // is caught naturally: the loopback TCP connect then fails within the
-    // 250 ms timeout and send_cmd returns None. No OS-specific probe needed.
-    true
+    false
 }
 
 // ---------------------------------------------------------------------------
@@ -111,11 +146,21 @@ fn pid_alive(_pid: u32) -> bool {
 pub fn send_cmd(cmd: &str) -> Option<String> {
     let (port, pid) = read_port_file()?;
     if !pid_alive(pid) {
+        remove_port_file_if_matches(port, pid);
         return None;
     }
     let addr = ([127, 0, 0, 1], port);
-    let mut sock = TcpStream::connect_timeout(&addr.into(), std::time::Duration::from_millis(250))
-        .ok()?;
+    let mut sock = match TcpStream::connect_timeout(&addr.into(), std::time::Duration::from_millis(250)) {
+        Ok(sock) => sock,
+        Err(_) => {
+            // A PID may have been reused after CLDR exited, or its port file
+            // may simply outlive a crash. Do not leave the next summon paying
+            // the same connection timeout. The exact-match check preserves a
+            // port just published by a newer instance.
+            remove_port_file_if_matches(port, pid);
+            return None;
+        }
+    };
     sock.set_read_timeout(Some(std::time::Duration::from_millis(250))).ok()?;
     sock.set_write_timeout(Some(std::time::Duration::from_millis(250))).ok()?;
     writeln!(sock, "{cmd}").ok()?;
@@ -255,5 +300,10 @@ mod tests {
         let reply = send_cmd("EVTJ-TVTL").unwrap_or_default();
         assert_eq!(reply, "ERR");
         unregister();
+    }
+
+    #[test]
+    fn current_process_is_alive() {
+        assert!(pid_alive(std::process::id()));
     }
 }
