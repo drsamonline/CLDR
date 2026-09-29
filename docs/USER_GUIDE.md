@@ -21,7 +21,7 @@ CLDR has **three cooperating pieces**:
 |---|---|---|---|
 | **Command window** | *(none)* / `--summon` | your terminal | interactive palette (type → route) |
 | **Tray resident** | `--tray` | background, notification area | keeps everything alive, autostarts, respawns daemon |
-| **Dispatch daemon** | `--daemon-start` | detached worker | services queued `open`/`run`/`sys` requests |
+| **Dispatch daemon** | `--daemon-start` | detached worker | services queued `open`/`run`/`sys` requests from durable per-request files |
 
 You normally never touch the daemon directly — the shortcut installer wires all three up.
 
@@ -93,7 +93,7 @@ Use `--exec` to build extra one-shot shortcuts (e.g. a desktop icon that runs
 
 | Symptom | Fix |
 |---|---|
-| Summon does nothing | ensure a CLDR window is actually running; stale `~/.cldr/port` files self-heal via the 250 ms connect timeout (see [SHORTCUTS.md](SHORTCUTS.md#ipc-control-channel-notes)) |
+| Summon does nothing | ensure a CLDR window is actually running; stale `~/.cldr/port` records self-heal by checking the recorded PID, or after one 250 ms unreachable-port attempt (see [SHORTCUTS.md](SHORTCUTS.md#ipc-control-channel-notes)) |
 | Hotkey dead on Linux | no `sxhkd`? bind manually in KDE/GNOME settings to `cldr --summon` ([recipes](SHORTCUTS.md)) |
 | Garbled terminal after crash | run `reset` — CLDR always restores on clean exit (`Esc`) |
 | Daemon won't start | check `$XDG_RUNTIME_DIR/cldr-daemon/daemon.log` (Linux) or `%TEMP%\cldr-daemon\daemon.log` |

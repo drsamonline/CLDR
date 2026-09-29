@@ -127,7 +127,9 @@ Two supported residency models (pick one; both are installed by default):
    the daemon alive and serves the loopback IPC control channel for summons.
    Started automatically at logon by the Startup folder / XDG autostart entry.
 2. **On-demand daemon (`cldr --daemon-start`)** — detached request worker with
-   PID/heartbeat files under `~/.cldr/`. Status: `cldr --daemon-status`,
+   PID/heartbeat files and a per-request queue under
+   `$XDG_RUNTIME_DIR/cldr-daemon` on Linux (or `%LOCALAPPDATA%\cldr-daemon` on
+   Windows). Status: `cldr --daemon-status`,
    stop: `cldr --daemon-stop`.
 
 ## 6 · Bind a global hotkey

@@ -13,9 +13,9 @@
 //! touches the clipboard at all. What remains here is deliberately minimal:
 //!
 //!   * raise_window()  — un-minimise + foreground our console/terminal,
-//!                       Win32 AttachThreadInput trick / Linux xdotool-wmctrl
+//!     Win32 AttachThreadInput trick / Linux xdotool-wmctrl
 //!   * run_tray_loop() — dependency-free background residency: installs the
-//!                       autostart launch shortcut and keeps the daemon alive
+//!     autostart launch shortcut and keeps the daemon alive
 //!   * ensure_autostart_entry() — XDG autostart / Startup-folder binding
 
 use std::io::Write;
@@ -116,17 +116,15 @@ fn linux_raise() {
         }
     }
 
-    let out = Command::new("xdotool")
-        .args(["search", "--all", "--pid"])
-        .arg(&mypid)
-        .stderr(Stdio::null())
-        .output();
-
-    if let Ok(o) = out {
-        if o.status.success() {
-            let lossy = String::from_utf8_lossy(&o.stdout).to_string();
-            let ids: Vec<&str> = lossy.split_whitespace().collect();
-            if let Some(id) = ids.last() {
+    for pid in &pids {
+        let out = Command::new("xdotool")
+            .args(["search", "--all", "--pid", pid])
+            .stderr(Stdio::null())
+            .output();
+        if let Ok(o) = out {
+            if o.status.success() {
+                let lossy = String::from_utf8_lossy(&o.stdout);
+                if let Some(id) = lossy.split_whitespace().last() {
                 let _ = Command::new("xdotool")
                     .args(["windowactivate", "--sync", id])
                     .stderr(Stdio::null())
@@ -138,23 +136,33 @@ fn linux_raise() {
                     .stdout(Stdio::null())
                     .status();
                 return;
+                }
             }
         }
     }
-    // Fallback: wmctrl activation by PID across ancestor chain.
-    for pid in pids {
-        let status = Command::new("wmctrl")
-            .args(["-i", "-a", &format!("_NET_ACTIVE_WINDOW")])
-            .stderr(Stdio::null())
-            .stdout(Stdio::null())
-            .status();
-        let _ = status;
-        let _ = Command::new("xdotool")
-            .args(["search", "--pid", &pid])
-            .stderr(Stdio::null())
-            .stdout(Stdio::null())
-            .status();
-        break; // single best-effort attempt; avoid spamming tools
+    // `wmctrl -lp` provides window IDs with owner PIDs. Match against the
+    // terminal's ancestor chain, then activate the matching window by ID.
+    let out = Command::new("wmctrl")
+        .args(["-lp"])
+        .stderr(Stdio::null())
+        .output();
+    if let Ok(o) = out {
+        let lossy = String::from_utf8_lossy(&o.stdout);
+        for pid in pids {
+            if let Some(id) = lossy.lines().find_map(|line| {
+                let mut fields = line.split_whitespace();
+                let id = fields.next()?;
+                let _desktop = fields.next()?;
+                (fields.next()? == pid).then_some(id)
+            }) {
+                let _ = Command::new("wmctrl")
+                    .args(["-i", "-a", id])
+                    .stderr(Stdio::null())
+                    .stdout(Stdio::null())
+                    .status();
+                return;
+            }
+        }
     }
 }
 
