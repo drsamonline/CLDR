@@ -57,7 +57,7 @@ otherwise?            → DuckDuckGo web search   e.g.  rust lifetimes
 | `/ls [path]` | `/ls ~/` | directory listing (≤ 50 rows) |
 | `/find <name>` | `/find report.pdf` | recursive search, depth ≤ 4, ≤ 50 hits |
 | `/web <query>` | `/web cat facts` | browser search |
-| `/calc <expr>` | `/calc (1+2)*3^…` | arithmetic `+ - * / ( ) unary-` |
+| `/calc <expr>` | `/calc (1+2)*3^…` | arithmetic `+ - * / % ^ ( ) unary-` |
 | `/sys` | `/sys` | cores, RAM, hostname, user |
 | `/help` | | cheat sheet in-pane |
 | `/clear` | | clear results pane |
