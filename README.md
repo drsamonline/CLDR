@@ -116,6 +116,11 @@ Loopback-only TCP control channel — **zero clipboard interference**, no
 privileged APIs, no firewall exposure — plus a real background daemon
 (`--daemon-start` / `--notify`) for queued `open`/`run`/`sys` requests.
 
+The rendezvous file contains both the ephemeral port and its owner PID. A
+summon first verifies that PID; dead or unreachable records are removed only
+when they still match the record that was read, so a concurrently-started
+instance is never deregistered by stale cleanup.
+
 > **v1.2:** the summon path moved from a clipboard mailbox to this IPC channel —
 > your clipboard is never touched again, and re-launching the shortcut while a
 > window is open simply raises it (single-instance guard).
