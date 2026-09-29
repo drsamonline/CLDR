@@ -59,7 +59,7 @@ CLDR *routes* it to the right action instantly.
 | 🧮 **Zero-dep calculator** | `+ - * / % ^ ( ) unary-minus` parser written from scratch, fully unit-tested |
 | 🪟 **True foreground summon** | Win32 `AttachThreadInput` foreground trick; `xdotool`/`wmctrl` on Linux |
 | 🩺 **Hardware diagnostics** | `/sys` — cores, memory, hostname, user — without spawning tools |
-| 🪶 **Near-idle daemon** | detached worker, sentinel-file IPC, ~0 CPU, <10 MB RSS |
+| 🪶 **Near-idle daemon** | detached worker, durable per-request file queue, ~0 CPU, <10 MB RSS |
 | 🔒 **Attribution watermark** | every file carries the author notice; stripping it violates the license |
 
 ## 🗂️ In-window commands
@@ -114,7 +114,8 @@ sequenceDiagram
 
 Loopback-only TCP control channel — **zero clipboard interference**, no
 privileged APIs, no firewall exposure — plus a real background daemon
-(`--daemon-start` / `--notify`) for queued `open`/`run`/`sys` requests.
+(`--daemon-start` / `--notify`) with atomically-published, per-request files
+for queued `open`/`run`/`sys` requests.
 
 The rendezvous file contains both the ephemeral port and its owner PID. A
 summon first verifies that PID; dead or unreachable records are removed only

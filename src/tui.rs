@@ -141,11 +141,7 @@ impl App {
             Down => self.move_sel(1),
             PageUp => self.move_sel(-10),
             PageDown => self.move_sel(10),
-            Home => {
-                if !self.entries.borrow().is_empty() {
-                    self.list_state.select(Some(0));
-                }
-            }
+            Home if !self.entries.borrow().is_empty() => self.list_state.select(Some(0)),
             End => self.jump_bottom(),
             Esc => self.running = false,
             _ => {}

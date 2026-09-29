@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - IPC rendezvous cleanup now checks the recorded process PID before connecting
   and removes stale or unreachable `~/.cldr/port` records only when their
   observed `<port> <pid>` pair has not been replaced by a newer instance.
+- `--notify` now writes atomically-published, per-request queue files instead
+  of overwriting a single request file; rapid notifications are retained.
+- Linux window raising now searches the terminal's ancestor PIDs and uses a
+  PID-to-window-ID `wmctrl -lp` fallback when `xdotool` cannot activate it.
 
 ## [1.2.0] - 2026-09-26
 

@@ -23,7 +23,10 @@ use std::time::Duration;
 
 use crate::engine::detached_shell;
 
-const DAEMON_TICK_SECS: u64 = 30;
+// One-second polling keeps `--notify` responsive while remaining effectively
+// idle between requests; queue files make each wake-up a tiny directory scan.
+const DAEMON_TICK_SECS: u64 = 1;
+const MAX_REQUESTS_PER_TICK: usize = 64;
 
 // ---------------------------------------------------------------------------
 // Sentinel paths
@@ -42,8 +45,8 @@ fn state_dir() -> PathBuf {
     base.join("cldr-daemon")
 }
 
-fn req_path() -> PathBuf {
-    state_dir().join("req")
+fn requests_dir() -> PathBuf {
+    state_dir().join("requests")
 }
 
 fn pid_path() -> PathBuf {
@@ -158,8 +161,20 @@ pub fn daemon_notify(request: &str) -> String {
     if !daemon_is_alive() {
         return "daemon not running — start with: cldr --daemon-start".into();
     }
-    fs::create_dir_all(state_dir()).ok();
-    match fs::write(req_path(), request) {
+    let dir = requests_dir();
+    if let Err(e) = fs::create_dir_all(&dir) {
+        return format!("notify failed: {e}");
+    }
+    // A unique, atomically-published file is a real queue: unlike the old
+    // single `req` file, a second notification cannot overwrite the first.
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let name = format!("{nonce}-{}", std::process::id());
+    let pending = dir.join(format!(".{name}.tmp"));
+    let request_file = dir.join(name);
+    match fs::write(&pending, request).and_then(|()| fs::rename(&pending, &request_file)) {
         Ok(()) => format!("queued for daemon: {request}"),
         Err(e) => format!("notify failed: {e}"),
     }
@@ -172,6 +187,7 @@ pub fn daemon_notify(request: &str) -> String {
 /// Headless worker loop: heartbeat, request servicing, stop sentinel polling.
 pub fn run_daemon_loop(stop: &AtomicBool) {
     fs::create_dir_all(state_dir()).ok();
+    fs::create_dir_all(requests_dir()).ok();
     let _ = fs::write(pid_path(), std::process::id().to_string());
     let _ = fs::remove_file(stop_path());
     while !stop.load(Ordering::Relaxed) && !stop_path().exists() {
@@ -180,13 +196,7 @@ pub fn run_daemon_loop(stop: &AtomicBool) {
             .map(|d| d.as_secs())
             .unwrap_or(0);
         let _ = fs::write(hb_path(), now.to_string());
-        if let Ok(req) = fs::read_to_string(req_path()) {
-            let req = req.trim().to_string();
-            let _ = fs::remove_file(&req_path());
-            if !req.is_empty() {
-                service_request(&req);
-            }
-        }
+        service_pending_requests();
         // Sleep in small quanta so shutdown stays prompt (<1s after stop flag).
         for _ in 0..DAEMON_TICK_SECS {
             if stop.load(Ordering::Relaxed) || stop_path().exists() {
@@ -200,11 +210,36 @@ pub fn run_daemon_loop(stop: &AtomicBool) {
     let _ = fs::remove_file(stop_path());
 }
 
+/// Service a bounded batch so a flood of requests cannot starve stop checks.
+/// Files are removed only after dispatch; an abrupt exit may retry the final
+/// request, but it never silently drops a successfully published request.
+fn service_pending_requests() {
+    let Ok(read_dir) = fs::read_dir(requests_dir()) else {
+        return;
+    };
+    let mut paths: Vec<PathBuf> = read_dir
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| !path.file_name().is_some_and(|name| name.to_string_lossy().starts_with('.')))
+        .collect();
+    paths.sort();
+    for path in paths.into_iter().take(MAX_REQUESTS_PER_TICK) {
+        if let Ok(req) = fs::read_to_string(&path) {
+            let req = req.trim();
+            if !req.is_empty() {
+                service_request(req);
+            }
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
 fn service_request(req: &str) {
     // Requests look like:  open <path> | run <cmd> | sys
     let (head, arg) = match req.find(' ') {
         Some(i) => (&req[..i], req[i + 1..].trim()),
-        None => (&req[..], ""),
+        None => (req, ""),
     };
     let outcome = match head {
         "open" => match open::that(arg) {
