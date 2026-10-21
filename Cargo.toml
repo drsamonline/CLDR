@@ -2,7 +2,7 @@
 # © 2026 Dr. Sohil Momin. MIT licensed — attribution watermark required on copies.
 [package]
 name = "cldr"
-version = "1.2.0"
+version = "1.3.0"
 edition = "2021"
 authors = ["Dr. Sohil Momin"]
 description = "CLDR - Command Line Dispatch & Route. Minimal, zero-bloat command launcher with a background tray-resident summon window for Windows and Linux."
@@ -30,11 +30,16 @@ walkdir = "2.5"
 # launch-shortcut installers live in `scripts/` (see docs/SETUP_GUIDE.md).
 
 [profile.release]
+# Smallest + fastest: full LTO, one codegen unit, symbols stripped, abort on
+# panic (no unwinding tables). Yields a single ~600 KB static-ish binary.
 opt-level = 3
-lto = true
+lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = true
+debug = false
+incremental = false
+overflow-checks = false
 
 [profile.dev]
 opt-level = 1

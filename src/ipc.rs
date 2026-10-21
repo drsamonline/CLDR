@@ -22,7 +22,7 @@
 //! publishes it (plus its PID) in `~/.cldr/port`. Stale files from dead
 //! processes are ignored via a liveness check before connecting.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -39,6 +39,10 @@ pub const CMD_PING: &str = "PING";
 pub const REPLY_OK_WINDOW: &str = "OK-WINDOW";
 pub const REPLY_OK_TRAY: &str = "OK-TRAY";
 pub const REPLY_PONG: &str = "PONG";
+
+/// Hard cap on a single control-channel line (bytes). Commands and replies are
+/// a handful of characters; anything larger is treated as malformed.
+const MAX_CTRL_LINE: u64 = 256;
 
 // ---------------------------------------------------------------------------
 // Port-file location + hygiene
@@ -76,12 +80,10 @@ fn publish_port(port: u16) {
 }
 
 fn remove_port_file() {
-    if let Some(p) = port_file() {
-        // Only delete if it still points at us (avoid racing newer instances).
-        if let Ok(txt) = std::fs::read_to_string(&p) {
-            if txt.split_whitespace().nth(1) == Some(&std::process::id().to_string()[..]) {
-                let _ = std::fs::remove_file(&p);
-            }
+    // Only delete if it still points at us (avoid racing newer instances).
+    if let Some((port, pid)) = read_port_file() {
+        if pid == std::process::id() {
+            remove_port_file_if_matches(port, pid);
         }
     }
 }
@@ -164,8 +166,10 @@ pub fn send_cmd(cmd: &str) -> Option<String> {
     sock.set_read_timeout(Some(std::time::Duration::from_millis(250))).ok()?;
     sock.set_write_timeout(Some(std::time::Duration::from_millis(250))).ok()?;
     writeln!(sock, "{cmd}").ok()?;
+    // Cap the reply we will accept so a hostile/rogue listener cannot make us
+    // allocate unbounded memory.
     let mut line = String::new();
-    BufReader::new(sock).read_line(&mut line).ok()?;
+    BufReader::new(sock).take(MAX_CTRL_LINE).read_line(&mut line).ok()?;
     let reply = line.trim().to_string();
     if reply.is_empty() { None } else { Some(reply) }
 }
@@ -234,9 +238,11 @@ pub fn declare_window_instance() {
 
 fn handle_conn(stream: &mut TcpStream) -> std::io::Result<()> {
     stream.set_read_timeout(Some(std::time::Duration::from_millis(500)))?;
-    let mut reader = BufReader::new(stream.try_clone()?);
+    let reader = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
-    reader.read_line(&mut line)?;
+    // Bounded read: reject anything longer than MAX_CTRL_LINE instead of
+    // growing a String without limit on a malicious local connection.
+    reader.take(MAX_CTRL_LINE).read_line(&mut line)?;
     match line.trim().to_ascii_uppercase().as_str() {
         CMD_PING => writeln!(stream, "{REPLY_PONG}")?,
         CMD_SUMMON => {
