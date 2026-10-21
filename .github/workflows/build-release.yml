@@ -194,12 +194,27 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
+      # Derive the version from Cargo.toml (not github.ref_name) so this works
+      # for both tag pushes and manual workflow_dispatch runs.
+      - name: Determine version
+        id: ver
+        shell: pwsh
+        run: |
+          $content = Get-Content Cargo.toml -Raw
+          $m = [regex]::Match($content, '(?m)^version\s*=\s*"([^"]+)"')
+          $v = $m.Groups[1].Value
+          if (-not $v) { throw 'Could not read version from Cargo.toml' }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "installer version: $v"
+
       - name: Build installer
         shell: pwsh
         run: |
+          # NOTE: Compress-Archive with a wildcard stores the folder CONTENTS at
+          # the archive root, so the unpacked binary sits at dist\pkg\cldr.exe.
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            /DMyAppVersion=${{ github.ref_name }} `
-            /DSourceDir="${{ github.workspace }}\dist\pkg\cldr-windows-x86_64" `
+            /DMyAppVersion=${{ steps.ver.outputs.version }} `
+            /DSourceDir="${{ github.workspace }}\dist\pkg" `
             /DOutputDir="${{ github.workspace }}\dist" `
             packaging\cldr.iss
           Get-ChildItem dist -Filter *.exe | Format-List Name,Length
