@@ -1,0 +1,8 @@
+# Pin the Rust toolchain so CI and local builds agree.
+# © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed — retain this notice.
+# Tip: replace "stable" with an exact release (e.g. "1.98.1") for byte-identical
+# reproducible builds; "stable" keeps contributors current.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

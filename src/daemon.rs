@@ -15,7 +15,7 @@
 use std::env;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -32,17 +32,58 @@ const MAX_REQUESTS_PER_TICK: usize = 64;
 // Sentinel paths
 // ---------------------------------------------------------------------------
 
+/// Last-resort tag used only when no per-user state directory can be found,
+/// so the shared temp fallback is still namespaced per user.
+fn user_tag() -> String {
+    env::var("USER")
+        .or_else(|_| env::var("USERNAME"))
+        .unwrap_or_else(|_| "user".to_string())
+}
+
+/// Per-user daemon state directory.
+///
+/// SECURITY: never default to the bare, world-writable temp directory. The
+/// daemon executes `open`/`run` requests found here, so a shared location
+/// would let any local user drop a request file and have it run as us.
+/// We therefore prefer (in order) a private runtime dir, the user's cache
+/// dir, and only then a per-user sub-directory of the temp dir.
 fn state_dir() -> PathBuf {
-    let base = if cfg!(windows) {
-        env::var("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| env::temp_dir())
-    } else {
-        env::var("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| env::temp_dir())
-    };
-    base.join("cldr-daemon")
+    #[cfg(windows)]
+    {
+        if let Ok(base) = env::var("LOCALAPPDATA") {
+            return PathBuf::from(base).join("cldr-daemon");
+        }
+        return env::temp_dir().join(format!("cldr-daemon-{}", user_tag()));
+    }
+    #[cfg(not(windows))]
+    {
+        if let Some(dir) = env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from) {
+            return dir.join("cldr-daemon");
+        }
+        if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+            return home.join(".cache").join("cldr-daemon");
+        }
+        env::temp_dir().join(format!("cldr-daemon-{}", user_tag()))
+    }
+}
+
+/// Tighten the state directory to owner-only on Unix so the request queue
+/// cannot be written by other local users.
+#[cfg(unix)]
+fn secure_dir(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(dir, fs::Permissions::from_mode(0o700));
+}
+
+#[cfg(not(unix))]
+fn secure_dir(_dir: &Path) {}
+
+/// Create (and secure) the state directory, returning its path.
+fn ensure_state_dir() -> PathBuf {
+    let dir = state_dir();
+    let _ = fs::create_dir_all(&dir);
+    secure_dir(&dir);
+    dir
 }
 
 fn requests_dir() -> PathBuf {
@@ -63,6 +104,13 @@ fn stop_path() -> PathBuf {
 
 fn log_path() -> PathBuf {
     state_dir().join("daemon.log")
+}
+
+/// Separate sink for the outcome of each serviced request. It must NOT be the
+/// heartbeat file: the heartbeat is rewritten every tick, which would erase
+/// the outcome a moment after it was written.
+fn outcomes_path() -> PathBuf {
+    state_dir().join("outcomes.log")
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +157,7 @@ fn process_alive(_pid: u32) -> bool {
 
 pub fn spawn_daemon_detached() -> std::io::Result<()> {
     let exe = env::current_exe()?;
-    fs::create_dir_all(state_dir()).ok();
+    ensure_state_dir();
     #[cfg(windows)]
     {
         // `cmd /C start "" <exe> --daemon` detaches fully from this console.
@@ -152,7 +200,7 @@ pub fn stop_requested() -> bool {
 }
 
 pub fn request_stop() -> std::io::Result<()> {
-    fs::create_dir_all(state_dir())?;
+    ensure_state_dir();
     fs::write(stop_path(), "stop")
 }
 
@@ -165,6 +213,7 @@ pub fn daemon_notify(request: &str) -> String {
     if let Err(e) = fs::create_dir_all(&dir) {
         return format!("notify failed: {e}");
     }
+    secure_dir(&dir);
     // A unique, atomically-published file is a real queue: unlike the old
     // single `req` file, a second notification cannot overwrite the first.
     let nonce = std::time::SystemTime::now()
@@ -186,8 +235,9 @@ pub fn daemon_notify(request: &str) -> String {
 
 /// Headless worker loop: heartbeat, request servicing, stop sentinel polling.
 pub fn run_daemon_loop(stop: &AtomicBool) {
-    fs::create_dir_all(state_dir()).ok();
-    fs::create_dir_all(requests_dir()).ok();
+    ensure_state_dir();
+    let _ = fs::create_dir_all(requests_dir());
+    secure_dir(&requests_dir());
     let _ = fs::write(pid_path(), std::process::id().to_string());
     let _ = fs::remove_file(stop_path());
     while !stop.load(Ordering::Relaxed) && !stop_path().exists() {
@@ -253,7 +303,9 @@ fn service_request(req: &str) {
         "sys" => "sys ok".to_string(),
         other => format!("unknown request: {other}"),
     };
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(hb_path()) {
+    // Log to a dedicated file, not the heartbeat (which is truncated every
+    // tick). The outcome would otherwise be erased almost immediately.
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(outcomes_path()) {
         let _ = writeln!(f, "{outcome}");
     }
 }

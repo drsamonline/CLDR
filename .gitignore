@@ -1,2 +1,22 @@
 # Build artifacts
-target/
+/target/
+/dist/
+/release-assets/
+
+# Rust
+**/*.rs.bk
+*.pdb
+
+# Logs / runtime state
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*~
