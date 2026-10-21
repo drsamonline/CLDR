@@ -10,7 +10,7 @@
 # 🛠️ CLDR — Setup Guide
 
 [![Build & Release](https://github.com/drsamonline/cldr/actions/workflows/build-release.yml/badge.svg)](https://github.com/drsamonline/cldr/actions/workflows/build-release.yml)
-![Version](https://img.shields.io/badge/version-1.1.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)
 
 *← [README](../README.md) · [User Guide](USER_GUIDE.md) · [Shortcut recipes](SHORTCUTS.md)*
@@ -52,7 +52,8 @@ No other runtime dependencies — CLDR is a single static-ish binary (<10 MB RAM
 git clone https://github.com/drsamonline/cldr.git
 cd cldr
 cargo build --release          # binary → target/release/cldr(.exe)
-cargo test                     # 6 engine unit tests must pass
+cargo test                     # engine + IPC + extras unit tests must pass
+cargo run -- --self-test       # 14 headless checks (exit 0 = pass)
 ```
 
 <details>
@@ -71,11 +72,17 @@ cargo test                     # 6 engine unit tests must pass
 Grab the archive for your platform from the
 [Releases page](https://github.com/drsamonline/cldr/releases):
 
-| Archive | Platform |
+| Archive / installer | Platform |
 |---|---|
-| `cldr-windows-x86_64-msvc.zip` | Windows 10/11 x64 |
-| `cldr-linux-x86_64.tar.gz` | Linux x86_64 (glibc ≥ 2.31) |
-| `cldr-linux-aarch64.tar.gz` | Linux ARM64 (Pi 4/5, RK boards) |
+| `cldr-windows-x86_64.zip` (portable) | Windows 10/11 x64 |
+| `cldr-<ver>-setup.exe` (installer) | Windows 10/11 x64 |
+| `cldr-linux-x86_64.tar.gz` (+ `./install.sh`) | Linux x86_64 (glibc ≥ 2.31) |
+| `cldr-linux-aarch64.tar.gz` (+ `./install.sh`) | Linux ARM64 (Pi 4/5, RK boards) |
+
+Every release includes `SHA256SUMS.txt` and SLSA build provenance. The Windows
+installer is built with Inno Setup (`packaging/cldr.iss`); the Linux `install.sh`
+places the binary in `~/.local/bin`, adds the menu entry, tray autostart and a
+systemd user service.
 
 ```powershell
 # Windows (PowerShell)
@@ -114,10 +121,12 @@ What it creates:
 ./scripts/install-shortcut.sh             # honours $BIN override
 ```
 
-Creates `~/.local/bin/cldr`, an application-menu entry, an
-**XDG autostart** tray entry (`~/.config/autostart/cldr-tray.desktop`), a
-systemd user service (`systemctl --user enable cldr`), and — if `sxhkd` is
-present — a `Super+Alt+C → cldr --summon` hotkey line.
+Creates `~/.local/bin/cldr`, an application-menu entry
+(`~/.local/share/applications/com.drsamonline.cldr.desktop`), an **XDG
+autostart** tray entry (`~/.config/autostart/com.drsamonline.cldr.desktop`), a
+systemd user service (`cldr-tray.service`, enabled with `systemctl --user
+enable cldr-tray.service`), and — if `sxhkd` is present — a `Super+Alt+C →
+cldr --summon` hotkey line.
 
 ## 5 · Background + tray autostart
 
@@ -144,9 +153,9 @@ cldr --summon
 ## 7 · Verify your install
 
 ```bash
-cldr --version        # → cldr 1.1.0
-cldr --exec "2^10"    # → [CALC] = 1024  (headless engine check)
-cldr --daemon-status  # shows PID / heartbeat of background worker
+cldr --version        # → CLDR v1.2.0 — Command Line Dispatch & Route · by Dr. Sohil Momin
+cldr --exec "2^10"    # → [CALC] 2^10 = 1024  (headless engine check)
+cldr --daemon-status  # → [daemon alive · window live]  (or stopped / no window)
 ```
 
 Then press your bound hotkey while no window is open — a command window should

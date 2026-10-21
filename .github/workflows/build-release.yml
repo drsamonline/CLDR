@@ -1,8 +1,17 @@
 # =============================================================================
-# CLDR — Command Line Dispatch & Route  (CI workflow)
+# CLDR — Command Line Dispatch & Route  (CI + release workflow)
 # © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed: retain this attribution
 # notice in all copies or substantial portions of this file.
 # =============================================================================
+#
+#  push / PR          → check job: fmt, clippy, build, tests, self-test
+#  push to main       → check job only (no publish — releases are tag-driven)
+#  push tag v*        → check → build matrix → portable archives + Windows
+#                       installer + SHA256SUMS + build provenance → GitHub Release
+#  workflow_dispatch  → same as a tag (manual release)
+#
+# To cut a release:  git tag v1.3.0 && git push origin v1.3.0
+# (The tag must match the `version` in Cargo.toml — the guard below enforces it.)
 name: Build & Release
 
 on:
@@ -13,14 +22,15 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   # ---------------------------------------------------------------------------
-  # CI gate: build + tests on every push / PR
+  # CI gate: correctness on every push / PR
   # ---------------------------------------------------------------------------
   check:
     name: Check (${{ matrix.os }})
@@ -34,6 +44,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache cargo registry + target dir
         uses: Swatinem/rust-cache@v2
@@ -44,13 +56,26 @@ jobs:
       - name: Run tests
         run: cargo test --release --locked
 
+      - name: Self-test (headless)
+        run: cargo run --release --locked -- --self-test
+
+      # Informational only for now: promote to blocking once the tree is
+      # confirmed fmt/clippy-clean locally (`cargo fmt` && `cargo clippy --fix`).
+      - name: rustfmt check
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: clippy
+        continue-on-error: true
+        run: cargo clippy --all-targets --locked
+
   # ---------------------------------------------------------------------------
-  # Release matrix: builds on tags, or automatically on main/master pushes
+  # Release matrix: portable archives for Windows + Linux (x86_64 + aarch64)
   # ---------------------------------------------------------------------------
   release:
     name: Release (${{ matrix.job.name }})
     needs: check
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -59,12 +84,15 @@ jobs:
           - name: linux-x86_64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            archive: tar.gz
           - name: linux-aarch64
             os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
-          - name: windows-x86_64-msvc
+            archive: tar.gz
+          - name: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            archive: zip
     steps:
       - uses: actions/checkout@v4
 
@@ -78,19 +106,19 @@ jobs:
         with:
           key: ${{ matrix.job.name }}
 
-      # ---- Guard: git tag must match Cargo.toml (only active if an actual tag was pushed) ----
+      # ---- Guard: git tag must match Cargo.toml (only if an actual tag was pushed)
       - name: Verify tag matches Cargo.toml version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
-          pkg=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          pkg=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           tag="${GITHUB_REF_NAME#v}"
           if [ "$pkg" != "$tag" ]; then
-            echo "::error::Tag v$tag does not match Cargo.toml version$pkg"
+            echo "::error::Tag v$tag does not match Cargo.toml version $pkg"
             exit 1
           fi
 
-      # ---- Linux cross-compilation toolchains ------------------------------
+      # ---- Linux cross toolchain
       - name: Install cross toolchain (aarch64-linux)
         if: matrix.job.target == 'aarch64-unknown-linux-gnu'
         run: |
@@ -98,78 +126,154 @@ jobs:
           sudo apt-get install -y gcc-aarch64-linux-gnu
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
 
-      # ---- Build ------------------------------------------------------------
       - name: Build (release, ${{ matrix.job.target }})
         run: cargo build --release --locked --target ${{ matrix.job.target }}
 
-      # ---- Package artifacts (zip for Windows, tar.gz for Linux) -----------
-      - name: Package artifact (Windows)
-        if: contains(matrix.job.target, 'windows')
+      # ---- Package: portable archive (binary + docs + installers) ----------
+      - name: Package (Windows)
+        if: matrix.job.archive == 'zip'
         shell: pwsh
         run: |
-          $bin = "target/${{ matrix.job.target }}/release/cldr.exe"
-          Compress-Archive -Path $bin -DestinationPath cldr-${{ matrix.job.name }}.zip
-          Get-Item cldr-${{ matrix.job.name }}.zip | Format-List Name,Length
+          $name = "cldr-${{ matrix.job.name }}"
+          $stage = "stage/$name"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item "target/${{ matrix.job.target }}/release/cldr.exe" $stage
+          Copy-Item README.md, LICENSE, CHANGELOG.md $stage
+          New-Item -ItemType Directory -Force -Path "$stage/docs" | Out-Null
+          Copy-Item docs/*.md "$stage/docs"
+          New-Item -ItemType Directory -Force -Path "$stage/scripts" | Out-Null
+          Copy-Item scripts/*.ps1, scripts/*.sh "$stage/scripts"
+          Copy-Item packaging/PORTABLE.txt $stage
+          Compress-Archive -Path "$stage/*" -DestinationPath "$name.zip"
+          Get-Item "$name.zip" | Format-List Name,Length
 
-      - name: Package artifact (Linux)
-        if: contains(matrix.job.target, 'linux')
+      - name: Package (Linux)
+        if: matrix.job.archive == 'tar.gz'
         run: |
-          tar -C target/${{ matrix.job.target }}/release \
-              -czf cldr-${{ matrix.job.name }}.tar.gz cldr
-          ls -lh cldr-${{ matrix.job.name }}.tar.gz
+          name="cldr-${{ matrix.job.name }}"
+          stage="stage/$name"
+          mkdir -p "$stage/docs" "$stage/scripts"
+          cp "target/${{ matrix.job.target }}/release/cldr" "$stage/"
+          cp README.md LICENSE CHANGELOG.md "$stage/"
+          cp docs/*.md "$stage/docs/"
+          cp scripts/*.sh "$stage/scripts/"
+          cp packaging/PORTABLE.txt packaging/install.sh packaging/uninstall.sh "$stage/"
+          chmod +x "$stage/cldr" "$stage/install.sh" "$stage/uninstall.sh" "$stage/scripts/"*.sh
+          tar -C stage -czf "$name.tar.gz" "$name"
+          ls -lh "$name.tar.gz"
 
-      - name: Upload artifact
+      - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
           name: cldr-${{ matrix.job.name }}
-          path: |
-            cldr-*.tar.gz
-            cldr-*.zip
+          path: cldr-${{ matrix.job.name }}.*
 
   # ---------------------------------------------------------------------------
-  # GitHub Release: attaches binaries automatically to a release matching Cargo.toml
+  # Windows installer (Inno Setup) — built once, from the windows artifact
   # ---------------------------------------------------------------------------
-  publish:
-    name: Publish GitHub Release
+  installer:
+    name: Windows installer
     needs: release
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Determine Release Tag
+      - name: Download the Windows portable build
+        uses: actions/download-artifact@v4
+        with:
+          name: cldr-windows-x86_64
+          path: dist
+
+      - name: Unpack portable archive
+        shell: pwsh
+        run: |
+          Expand-Archive -Path dist/cldr-windows-x86_64.zip -DestinationPath dist/pkg -Force
+          Get-ChildItem -Recurse dist/pkg | Select-Object FullName
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            /DMyAppVersion=${{ github.ref_name }} `
+            /DSourceDir="${{ github.workspace }}\dist\pkg\cldr-windows-x86_64" `
+            /DOutputDir="${{ github.workspace }}\dist" `
+            packaging\cldr.iss
+          Get-ChildItem dist -Filter *.exe | Format-List Name,Length
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cldr-installer-windows
+          path: dist/*.exe
+
+  # ---------------------------------------------------------------------------
+  # Publish: checksums + provenance + GitHub Release
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish GitHub Release
+    needs: [release, installer]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine release tag
         id: release_info
         shell: bash
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           else
-            pkg_ver=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+            pkg_ver=$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
             echo "tag=v${pkg_ver}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download all release artifacts
+      # Fresh directory — never reuse a committed path (keeps stale binaries out).
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: release-assets
           merge-multiple: true
 
-      - name: Create / update release with binaries
+      - name: Generate SHA256SUMS
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt || sha256sum $(ls | grep -v SHA256SUMS) > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "release-assets/*"
+
+      - name: Create / update release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
+          name: CLDR ${{ steps.release_info.outputs.tag }}
           draft: false
           prerelease: false
           generate_release_notes: true
-          files: dist/*
+          files: release-assets/*
           body: |
             ## CLDR ${{ steps.release_info.outputs.tag }}
 
-            Single-binary command launcher with background tray + shortcut summon.
+            A single-binary command launcher: sits in the tray, pops up on your
+            shortcut, runs anything you type. Zero runtime dependencies.
 
-            **Install:** download the archive for your platform, extract, then run
-            `scripts/install-shortcut.(ps1|sh)` to bind the launch shortcut and enable
-            autostart. See [SETUP_GUIDE](docs/SETUP_GUIDE.md).
+            **Portable** — download the archive for your platform, extract, run `cldr`.
+            **Installer** — Windows: run `cldr-<version>-setup.exe`.
+            **Linux** — extract and run `./install.sh`.
+
+            Verify your download against `SHA256SUMS.txt`.
 
             ---
             © 2026 Dr. Sohil Momin (drsamonline) — MIT license, attribution required.

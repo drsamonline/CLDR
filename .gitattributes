@@ -1,0 +1,13 @@
+# Normalise line endings; keep binaries binary.
+# © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed — retain this notice.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.exe  binary
+*.zip  binary
+*.tar.gz binary
+
+*.sh   text eol=lf
+*.ps1  text eol=crlf
