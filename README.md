@@ -1,3 +1,23 @@
+<div align="center">
+
+<img src="assets/cldr-icon.svg" alt="CLDR icon" width="84"/>
+
+# CLDR — Command Line Dispatch &amp; Route
+
+**A single tiny Rust binary that sits in your tray, pops up on a keystroke, and runs whatever you type — a sum, a path, an app, a search.**
+
+[![Build & Release](https://github.com/drsamonline/CLDR/actions/workflows/build-release.yml/badge.svg)](https://github.com/drsamonline/CLDR/actions/workflows/build-release.yml)
+[![Release](https://img.shields.io/github/v/release/drsamonline/CLDR?include_prereleases&style=flat-square)](https://github.com/drsamonline/CLDR/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)](#-download)
+[![Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white&style=flat-square)](https://www.rust-lang.org/)
+[![License: MIT + attribution](https://img.shields.io/badge/license-MIT%20%2B%20attribution-yellow?style=flat-square)](LICENSE)
+
+### [Landing page](https://drsamonline.github.io/CLDR/) · [Download the latest release](https://github.com/drsamonline/CLDR/releases) · [User guide](docs/USER_GUIDE.md) · [Setup guide](docs/SETUP_GUIDE.md)
+
+</div>
+
+---
+
 <!--
   CLDR — Command Line Dispatch & Route
   © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
