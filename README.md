@@ -30,7 +30,6 @@
 
 <img src="assets/cldr-icon.svg" alt="CLDR icon" width="104"/>
 
-# ⚡ CLDR — Command Line Dispatch & Route
 
 **A single tiny binary that sits in your tray, pops up on a keystroke, and runs
 whatever you type — a sum, a path, an app, a search.**
