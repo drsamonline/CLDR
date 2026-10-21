@@ -22,12 +22,11 @@ use std::thread;
 
 use walkdir::WalkDir;
 
+use crate::extras;
+
 pub const APP_NAME: &str = "CLDR";
 pub const APP_TAGLINE: &str = "Command Line Dispatch & Route";
 pub const AUTHOR: &str = "Dr. Sohil Momin";
-pub const MAX_RESULTS: usize = 50;
-pub const FIND_MAX_DEPTH: usize = 4;
-pub const FIND_MAX_MATCHES: usize = MAX_RESULTS;
 pub const SCROLLBACK_CAP: usize = 5_000; // hard memory ceiling for results panes
 
 // ---------------------------------------------------------------------------
@@ -240,11 +239,19 @@ pub fn calc(src: &str) -> Result<f64, String> {
 }
 
 pub fn fmt_num(v: f64) -> String {
-    if v.fract() == 0.0 && v.abs() < 1e15 {
-        format!("{}", v as i64)
-    } else {
-        format!("{v}")
+    if !v.is_finite() {
+        // NaN / ±inf: keep Rust's canonical spelling ("NaN", "inf").
+        return format!("{v}");
     }
+    if v.fract() == 0.0 && v.abs() < 1e15 {
+        return format!("{}", v as i64);
+    }
+    // Avoid printing hundreds of digits for astronomically large or tiny
+    // results (e.g. 2^1000). Fall back to compact scientific notation.
+    if v != 0.0 && (v.abs() >= 1e15 || v.abs() < 1e-4) {
+        return format!("{v:.6e}");
+    }
+    format!("{v}")
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +332,7 @@ pub fn cmd_open(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
 }
 
 pub fn cmd_ls(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
+    let cap = extras::config().max_results;
     let dir = if arg.is_empty() {
         env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
     } else {
@@ -350,22 +358,24 @@ pub fn cmd_ls(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     }
     names.sort_by(|a, b| a.0.cmp(&b.0));
     push(entries, Entry::new("INFO", format!("{} — {total} entries", dir.display())));
-    let shown = names.len().min(MAX_RESULTS);
-    for (name, is_dir) in names.into_iter().take(MAX_RESULTS) {
+    let shown = names.len().min(cap);
+    for (name, is_dir) in names.into_iter().take(cap) {
         let tag = if is_dir { "[DIR]" } else { "[FILE]" };
         push(entries, Entry::new(if is_dir { "DIR" } else { "FILE" }, format!("{tag} {name}")));
     }
     if total > shown {
-        push(entries, Entry::new("INFO", format!("… {} more (capped at {MAX_RESULTS})", total - shown)));
+        push(entries, Entry::new("INFO", format!("… {} more (capped at {cap})", total - shown)));
     }
     format!("ls {}: {total} entries", dir.display())
 }
 
 pub fn cmd_find(arg: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
+    let depth = extras::config().find_depth;
+    let max_matches = extras::config().max_results;
     if arg.is_empty() {
         push(
             entries,
-            Entry::new("ERR", format!("/find <name> — bounded recursive search (depth {FIND_MAX_DEPTH})")),
+            Entry::new("ERR", format!("/find <name> — bounded recursive search (depth {depth})")),
         );
         return "usage: /find".into();
     }
@@ -373,11 +383,11 @@ pub fn cmd_find(arg: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>) -> Str
     let root = if cwd.exists() { cwd.to_path_buf() } else { PathBuf::from(".") };
     push(
         entries,
-        Entry::new("INFO", format!("searching '{arg}' under {} (max depth {FIND_MAX_DEPTH})", root.display())),
+        Entry::new("INFO", format!("searching '{arg}' under {} (max depth {depth})", root.display())),
     );
     let mut matches = 0usize;
     for entry in WalkDir::new(&root)
-        .max_depth(FIND_MAX_DEPTH)
+        .max_depth(depth)
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -393,8 +403,8 @@ pub fn cmd_find(arg: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>) -> Str
                 .to_string();
             push(entries, Entry::new("MATCH", format!("{tag} {rel}")));
             matches += 1;
-            if matches >= FIND_MAX_MATCHES {
-                push(entries, Entry::new("INFO", format!("… truncated at {FIND_MAX_MATCHES} matches")));
+            if matches >= max_matches {
+                push(entries, Entry::new("INFO", format!("… truncated at {max_matches} matches")));
                 break;
             }
         }
@@ -407,10 +417,10 @@ pub fn cmd_find(arg: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>) -> Str
 
 pub fn cmd_web(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     if arg.is_empty() {
-        push(entries, Entry::new("ERR", "/web <query> — DuckDuckGo search in default browser"));
+        push(entries, Entry::new("ERR", "/web <query> — search in your default browser"));
         return "usage: /web".into();
     }
-    let url = format!("https://duckduckgo.com/?q={}", urlencode(arg));
+    let url = extras::config().search_url.replace("{q}", &urlencode(arg));
     match open::that(&url) {
         Ok(()) => {
             push(entries, Entry::new("WEB", format!("browser → {url}")));
@@ -448,7 +458,9 @@ pub fn cmd_sys(entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     let family = env::consts::FAMILY;
     let arch = env::consts::ARCH;
     let pointer = if cfg!(target_pointer_width = "64") { "64-bit" } else { "32-bit" };
-    let cores = num_cores();
+    let cores = num_cores()
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
     let host = hostname();
     let user = whoami();
     push(entries, Entry::new("SYS", format!("OS          : {os} (family: {family}, {pointer})")));
@@ -461,8 +473,8 @@ pub fn cmd_sys(entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     format!("{os}/{arch} · {cores} cores")
 }
 
-fn num_cores() -> usize {
-    thread::available_parallelism().map(|n| n.get()).unwrap_or(0)
+fn num_cores() -> Option<usize> {
+    thread::available_parallelism().ok().map(|n| n.get())
 }
 
 #[cfg(unix)]
@@ -571,21 +583,22 @@ pub fn smart_route(raw: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
             return format!("auto-calc: {input} = {}", fmt_num(v));
         }
     }
-    // 2) Existing file/folder on disk → open it.
+    // 2) Unit conversion ("10 km in mi", "100 f to c").
+    if let Some(converted) = extras::convert_units(input) {
+        push(entries, Entry::new("CALC", converted.clone()));
+        return format!("auto-convert: {converted}");
+    }
+    // 3) Existing file/folder on disk → open it. (Users who need a path with
+    //    spaces can quote it themselves: `/open "my file.txt"`.)
     let path = expand_tilde(input);
     if path.exists() {
         return cmd_open(input, entries);
     }
-    let quoted = format!("\"{}\"", input.replace('"', "\\\""));
-    let alt = expand_tilde(&quoted);
-    if alt.exists() {
-        return cmd_open(&quoted, entries);
-    }
-    // 3) Named executable on PATH → launch it detached.
+    // 4) Named executable on PATH → launch it detached.
     if !input.contains(' ') && which(input) {
         return cmd_run(input, entries);
     }
-    // 4) Fallback → web search.
+    // 5) Fallback → web search.
     cmd_web(input, entries)
 }
 
@@ -594,9 +607,30 @@ pub fn smart_route(raw: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
 // ---------------------------------------------------------------------------
 
 pub fn execute_input(raw: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
+    dispatch(raw, cwd, entries, 0)
+}
+
+/// One dispatch level. `depth` bounds alias expansion so a self-referential
+/// alias (`alias.a = a`) cannot recurse forever.
+fn dispatch(raw: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>, depth: u8) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return "type /help for commands".into();
+    }
+    // Alias expansion, e.g. `alias.g = /web` turns `g rust` into `/web rust`.
+    if depth < 5 {
+        let (head, rest) = match trimmed.find(' ') {
+            Some(i) => (&trimmed[..i], trimmed[i + 1..].trim()),
+            None => (trimmed, ""),
+        };
+        if let Some(val) = extras::config().alias(head) {
+            let expanded = if rest.is_empty() {
+                val.to_string()
+            } else {
+                format!("{val} {rest}")
+            };
+            return dispatch(&expanded, cwd, entries, depth + 1);
+        }
     }
     if !trimmed.starts_with('/') {
         return smart_route(trimmed, entries);
@@ -630,18 +664,21 @@ pub fn show_help(entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     let rows = [
         ("/run <binary>", "spawn detached via OS shell"),
         ("/open <path>", "open file/folder in default viewer"),
-        ("/ls [path]", "list directory (capped at 50)"),
-        ("/find <name>", "recursive search, max depth 4"),
-        ("/web <query>", "DuckDuckGo search in browser"),
+        ("/ls [path]", "list directory (row-capped)"),
+        ("/find <name>", "recursive search, depth-capped"),
+        ("/web <query>", "search in your default browser"),
         ("/calc <expr>", "arithmetic: + - * / % ^ ( ) unary-"),
         ("/sys", "hardware diagnostics"),
         ("/help", "this cheat sheet"),
         ("/clear", "clear results pane"),
-        ("(no prefix)", "auto: math → path → PATH app → web"),
+        ("(no prefix)", "auto: math → units → path → PATH app → web"),
     ];
     push(entries, Entry::new("INFO", format!("{APP_NAME} — {APP_TAGLINE} · by {AUTHOR}")));
     for (cmd, desc) in rows {
         push(entries, Entry::new("INFO", format!("{cmd:<16} {desc}")));
+    }
+    if let Some(p) = extras::config_path() {
+        push(entries, Entry::new("INFO", format!("config: {}", p.display())));
     }
     "help displayed".into()
 }
@@ -692,6 +729,13 @@ mod tests {
     fn formatting() {
         assert_eq!(fmt_num(6.0), "6");
         assert_eq!(fmt_num(2.5), "2.5");
+        assert_eq!(fmt_num(-0.0), "0");
+        // Very large magnitudes collapse to scientific notation instead of
+        // dumping hundreds of digits (regression guard for 2^1000).
+        assert_eq!(fmt_num(1024.0), "1024");
+        assert!(fmt_num(2f64.powi(1000)).contains('e'));
+        assert!(fmt_num(2f64.powi(1000)).len() < 20);
+        assert_eq!(fmt_num(f64::NAN), "NaN");
     }
 
     #[test]

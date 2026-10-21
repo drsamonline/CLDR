@@ -16,7 +16,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- The daemon no longer falls back to the bare, world-writable temp directory
+  for its state/request queue. It now prefers `$XDG_RUNTIME_DIR`, then
+  `~/.cache/cldr-daemon`, and only then a per-user temp sub-directory, and it
+  tightens the directory to `0700` on Unix. Previously a system without
+  `XDG_RUNTIME_DIR` could let any local user drop a `run`/`open` request that
+  the daemon would execute as the victim.
+- IPC control-channel reads (both client and server side) are now capped at
+  256 bytes per line, so a rogue local connection cannot force unbounded
+  allocation.
+
 ### Fixed
+- The daemon's per-request outcome log was written to the heartbeat file,
+  which is truncated on every tick — outcomes vanished within a second. They
+  now go to a dedicated `outcomes.log`.
+- `--exec`/`/calc` results with astronomically large or tiny magnitudes (e.g.
+  `2^1000`) no longer print hundreds of digits; `fmt_num` falls back to
+  compact scientific notation. `NaN`/`inf` are handled explicitly.
+- The release workflow no longer attaches the stale, committed `dist/*`
+  binaries to a release; fresh artifacts are staged in a dedicated directory.
+- `install-shortcut.sh` only installs the systemd unit on a systemd host;
+  `uninstall-shortcut.sh` prints the real state-dir path (fixed a `$$`/`${}`
+  expansion bug).
+- Docs: corrected version badges, installer output filenames, module map
+  (`summon.rs` no longer described as a "clipboard mailbox"; `ipc.rs` added),
+  and `.gitignore` now actually covers logs/OS/editor junk as CONTRIBUTING
+  claims.
 - IPC rendezvous cleanup now checks the recorded process PID before connecting
   and removes stale or unreachable `~/.cldr/port` records only when their
   observed `<port> <pid>` pair has not been replaced by a newer instance.
@@ -24,6 +50,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of overwriting a single request file; rapid notifications are retained.
 - Linux window raising now searches the terminal's ancestor PIDs and uses a
   PID-to-window-ID `wmctrl -lp` fallback when `xdotool` cannot activate it.
+
+## [1.3.0] - 2026-10-21
+
+### Added
+- **Unit conversion** in the smart cascade: length, mass and temperature
+  (`10 km in mi`, `100 f to c`, `5kg to lb`), with long unit names supported.
+- **Config file** `~/.config/cldr/config.toml` (`%APPDATA%\cldr\config.toml`),
+  parsed by a zero-dependency reader: configurable `search_url`, `max_results`,
+  `find_depth`, and `alias.<name>` command aliases.
+- **Command history** — `~`/`down`, `Ctrl+P`/`Ctrl+N`, persisted to
+  `~/.config/cldr/history` (capped, de-duplicated).
+- **`Ctrl+Y` copy** of the last result via OSC 52 (no clipboard crate, works
+  over SSH); **`Ctrl+C`** quits; **`Ctrl+L`** clears the pane.
+- **`cldr --self-test`** — 14 headless checks for CI on terminal-less runners.
+- **`cldr --config`** — write/print the starter config file.
+- **Compact window on Windows**: the console is shrunk to a ~92x26 box and
+  positioned near the top of the screen on startup.
+- **`packaging/`** — Inno Setup Windows installer, Linux `install.sh` /
+  `uninstall.sh`, portable notes; **`rust-toolchain.toml`**, **`.gitattributes`**,
+  **`SECURITY.md`**.
+- **Docs**: rendered UI previews under `docs/screenshots/`, beautified README.
+
+### Changed
+- **Performance**: the TUI now redraws only when something changes (dirty flag)
+  instead of every 16 ms; idle cost is a single 250 ms `poll()`.
+- Release profile tightened for the smallest + fastest binary: full LTO, one
+  codegen unit, stripped symbols, `panic=abort`, no overflow checks.
+- **CI**: tag-driven releases (`git tag v1.3.0 && git push origin v1.3.0`);
+  portable archives for Windows + Linux (x86_64, aarch64), a Windows installer,
+  `SHA256SUMS.txt`, and SLSA build provenance. `contents: write` is scoped to
+  the publish job only. `rustfmt`/`clippy` run as informational gates.
 
 ## [1.2.0] - 2026-09-26
 

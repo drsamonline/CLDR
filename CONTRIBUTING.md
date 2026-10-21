@@ -42,7 +42,8 @@
 git clone https://github.com/drsamonline/cldr.git && cd cldr
 rustup component add rustfmt clippy
 cargo run                          # foreground TUI
-cargo test                         # engine unit tests
+cargo test                         # engine + IPC + extras unit tests
+cargo run  -- --self-test          # headless sanity checks
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 ```
@@ -53,10 +54,13 @@ cargo clippy --all-targets -- -D warnings
 |---|---|
 | `src/main.rs` | CLI router only — parse flags, dispatch to modes. No logic. |
 | `src/engine.rs` | dispatcher, calculator, cascade, unit tests |
+| `src/extras.rs` | config, aliases, history, unit conversion, base64, self-test |
+| `src/ipc.rs` | loopback-TCP summon/PING control channel + port/PID rendezvous |
 | `src/daemon.rs` | detached background worker, PID/heartbeat/stop sentinels |
-| `src/tui.rs` | ratatui/crossterm UI + summon watcher wiring |
-| `src/summon.rs` | clipboard mailbox, window raise, autostart, tray loop |
+| `src/tui.rs` | ratatui/crossterm UI + IPC server wiring |
+| `src/summon.rs` | window raise (Win32 / X11), autostart entry, tray loop |
 | `scripts/` | OS shortcut installers (PowerShell / POSIX sh) |
+| `packaging/` | distribution installers (Inno Setup, Linux install/uninstall) |
 | `docs/` | user/setup/shortcut documentation |
 
 ## Submitting a pull request

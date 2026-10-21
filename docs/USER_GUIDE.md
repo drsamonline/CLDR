@@ -43,10 +43,15 @@ Anything **without** a leading `/` is auto-routed:
 
 ```text
 math expression?      → compute inline          e.g.  2*(3+4)/7   → 2
+unit conversion?      → convert                 e.g.  10 km in mi  → 6.213712 mi
 existing file/folder? → open in default viewer  e.g.  ~/Downloads
 on PATH as a binary?  → spawn detached          e.g.  code .
-otherwise?            → DuckDuckGo web search   e.g.  rust lifetimes
+otherwise?            → web search              e.g.  rust lifetimes
 ```
+
+Unit conversion understands length (`mm cm m km in ft yd mi nmi`), mass
+(`mg g kg oz lb st t`) and temperature (`c f k`), and accepts long names
+(`10 kilometres in miles`).
 
 ## 4. Slash commands
 
@@ -69,9 +74,13 @@ Paths accept `~`, `~/sub`, absolute and relative forms on both platforms.
 | Key | Action |
 |---|---|
 | `Enter` | submit line |
-| `↑ ↓ PgUp PgDn Home End` | scroll results |
-| `Del` | clear input buffer |
-| `Esc` | quit (terminal restored cleanly) |
+| `↑` `↓` | recall history when the input is empty, otherwise scroll results |
+| `Ctrl+P` `Ctrl+N` | history prev / next (always) |
+| `PgUp` `PgDn` `Home` `End` | scroll results |
+| `Ctrl+Y` | copy the last result to the clipboard (OSC 52 — works over SSH) |
+| `Ctrl+L` | clear the results pane |
+| `Del` | clear the input buffer |
+| `Esc` / `Ctrl+C` | quit (terminal restored cleanly) |
 | printable + `Shift` | normal text entry |
 
 Status strip shows last outcome + current working directory. Scrollback is hard-capped
@@ -81,10 +90,29 @@ at 5 000 lines so memory can never grow unbounded.
 
 ```bash
 cldr --exec "12*3.5"              # prints "[CALC] 12*3.5 = 42", exits — great for shortcuts
+cldr --exec "10 km in mi"         # one-shot unit conversion
+cldr --self-test                  # 14 headless checks, exit 0 = pass
+cldr --config                     # write/print the config file path
 cldr --notify "open ~/notes.md"   # queue work for the background daemon
 cldr --daemon-status              # alive? stopped?
 cldr --daemon-stop                # graceful shutdown (sentinel file)
 ```
+
+## 6a. Configuration & aliases
+
+`cldr --config` creates `~/.config/cldr/config.toml`
+(`%APPDATA%\cldr\config.toml` on Windows). Everything is optional:
+
+```toml
+search_url = "https://duckduckgo.com/?q={q}"   # change the search engine
+max_results = 50                                 # /ls and /find row cap
+find_depth  = 4                                  # /find recursion depth
+alias.g  = /web                                  # "g rust" → "/web rust"
+alias.n  = /run nvim
+```
+
+Command history is stored alongside it in `~/.config/cldr/history` (last 500
+commands, de-duplicated).
 
 Use `--exec` to build extra one-shot shortcuts (e.g. a desktop icon that runs
 `cldr --exec "/open ~/Documents"`).
@@ -96,7 +124,8 @@ Use `--exec` to build extra one-shot shortcuts (e.g. a desktop icon that runs
 | Summon does nothing | ensure a CLDR window is actually running; stale `~/.cldr/port` records self-heal by checking the recorded PID, or after one 250 ms unreachable-port attempt (see [SHORTCUTS.md](SHORTCUTS.md#ipc-control-channel-notes)) |
 | Hotkey dead on Linux | no `sxhkd`? bind manually in KDE/GNOME settings to `cldr --summon` ([recipes](SHORTCUTS.md)) |
 | Garbled terminal after crash | run `reset` — CLDR always restores on clean exit (`Esc`) |
-| Daemon won't start | check `$XDG_RUNTIME_DIR/cldr-daemon/daemon.log` (Linux) or `%TEMP%\cldr-daemon\daemon.log` |
+| Daemon won't start | check `$XDG_RUNTIME_DIR/cldr-daemon/daemon.log` (Linux) or `%LOCALAPPDATA%\cldr-daemon\daemon.log` (Windows); outcomes land in `outcomes.log` next to it |
+| Ctrl+Y didn't copy | your terminal may block OSC 52 — most (Windows Terminal, GNOME Terminal, kitty, alacritty) allow it; check terminal settings |
 | Autostart missing | rerun the installer script; on Windows sign out/in once for the Startup folder entry |
 
 ---

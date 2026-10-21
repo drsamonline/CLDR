@@ -26,6 +26,7 @@
 
 mod daemon;
 mod engine;
+mod extras;
 mod ipc;
 mod summon;
 mod tui;
@@ -52,6 +53,8 @@ USAGE
   cldr --daemon-status         Show daemon status
   cldr --notify \"<request>\"      Queue open/run/sys for the daemon
   cldr --exec \"<input>\"          Headless one-shot dispatch, prints results
+  cldr --self-test             Run headless sanity checks (exit 0 = pass)
+  cldr --config                Write/print the path to the config file
   cldr --help                  This text
   cldr --version               Version info
 
@@ -82,6 +85,13 @@ fn main() {
                 env!("CARGO_PKG_VERSION")
             );
         }
+        Some("--self-test") => {
+            std::process::exit(extras::self_test());
+        }
+        Some("--config") => match extras::ensure_config() {
+            Some(p) => println!("[OK] config: {}", p.display()),
+            None => println!("[ERR] no writable config directory found"),
+        },
         Some("--summon") => {
             // A1: route SUMMON over the loopback IPC control channel to any
             // live *visible* CLDR window. The tray process answers PING but

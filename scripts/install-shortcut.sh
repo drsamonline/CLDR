@@ -61,7 +61,7 @@ else
 fi
 
 # Keep the daemon alive under systemd user sessions when available
-if command -v systemctl >/dev/null 2>&1 && [ -d "$HOME/.config/systemd/user" -o ! -e /run/systemd/generator ]; then
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   mkdir -p "$HOME/.config/systemd/user"
   cat > "$HOME/.config/systemd/user/cldr-tray.service" <<EOF
 # CLDR background service unit — © 2026 Dr. Sohil Momin (drsamonline)

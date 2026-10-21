@@ -6,10 +6,14 @@
 //! watermark is a violation of the license terms.
 //! ============================================================================
 //!
-//! Interactive terminal UI: raw-mode crossterm + ratatui, bounded scrollback,
-//! blinking-caret ticker, summon-window watcher (tray → foreground), and full
-//! terminal restoration on exit.
-//! © 2026 Dr. Sohil Momin — attribution watermark retained per license.
+//! Interactive terminal UI: raw-mode crossterm + ratatui.
+//!
+//! Performance notes:
+//!   * The screen is redrawn only when something actually changed (`dirty`
+//!     flag). The idle loop therefore costs one `poll()` every 250 ms and
+//!     nothing else — no 60 fps busy redraw.
+//!   * The results pane is a bounded `Vec` with a hard scrollback cap, so
+//!     memory cannot grow without bound.
 
 use std::cell::RefCell;
 use std::env;
@@ -35,9 +39,13 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
-use crate::engine::{execute_input, push, Entry, APP_NAME, APP_TAGLINE, AUTHOR, SCROLLBACK_CAP};
+use crate::engine::{execute_input, push, Entry, APP_NAME, APP_TAGLINE, AUTHOR};
+use crate::extras;
 
-const POLL_MS: u64 = 16; // ~60 fps UI poll; near-zero idle CPU
+/// Event poll interval. Events wake the loop immediately, so this only governs
+/// how often we notice the cursor-blink tick — no input latency is added.
+const POLL_MS: u64 = 250;
+const HISTORY_CAP: usize = 500;
 
 // ---------------------------------------------------------------------------
 // App state
@@ -50,7 +58,11 @@ pub struct App {
     list_state: ListState,
     status: String,
     running: bool,
+    dirty: bool,
     cwd: PathBuf,
+    history: Vec<String>,
+    hist_idx: Option<usize>,
+    draft: String,
     /// Set by the summon watcher thread when the tray/hotkey asks us to come forward.
     pub summoned: Arc<AtomicBool>,
 }
@@ -71,7 +83,10 @@ impl App {
                 format!("{APP_NAME} v{} — {APP_TAGLINE} · by {AUTHOR}", env!("CARGO_PKG_VERSION")),
             ),
         );
-        push(&entries, Entry::new("INFO", "press /help for the command cheat sheet · Esc hides/quits"));
+        push(
+            &entries,
+            Entry::new("INFO", "type /help for commands · ↑ history · Ctrl+Y copy · Esc quit"),
+        );
         let mut app = Self {
             input: String::new(),
             cursor_visible: true,
@@ -79,7 +94,11 @@ impl App {
             list_state: ListState::default(),
             status: "ready".into(),
             running: true,
+            dirty: true,
             cwd: env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            history: extras::load_history(),
+            hist_idx: None,
+            draft: String::new(),
             summoned: Arc::new(AtomicBool::new(false)),
         };
         app.jump_bottom();
@@ -99,8 +118,71 @@ impl App {
 
     fn submit(&mut self) {
         let raw = std::mem::take(&mut self.input);
+        self.hist_idx = None;
+        self.draft.clear();
+        let t = raw.trim().to_string();
+        if !t.is_empty() && self.history.last().map(String::as_str) != Some(t.as_str()) {
+            self.history.push(t.clone());
+            if self.history.len() > HISTORY_CAP {
+                self.history.drain(..self.history.len() - HISTORY_CAP);
+            }
+            extras::append_history(&t);
+        }
         self.status = execute_input(&raw, &self.cwd, &self.entries);
         self.jump_bottom();
+        self.dirty = true;
+    }
+
+    fn hist_prev(&mut self) {
+        if self.history.is_empty() {
+            return;
+        }
+        let idx = match self.hist_idx {
+            None => {
+                self.draft = self.input.clone();
+                self.history.len() - 1
+            }
+            Some(0) => 0,
+            Some(i) => i - 1,
+        };
+        self.hist_idx = Some(idx);
+        self.input = self.history[idx].clone();
+        self.dirty = true;
+    }
+
+    fn hist_next(&mut self) {
+        match self.hist_idx {
+            None => {}
+            Some(i) if i + 1 < self.history.len() => {
+                self.hist_idx = Some(i + 1);
+                self.input = self.history[i + 1].clone();
+            }
+            Some(_) => {
+                self.hist_idx = None;
+                self.input = std::mem::take(&mut self.draft);
+            }
+        }
+        self.dirty = true;
+    }
+
+    /// Copy the newest result (or the status line) to the terminal clipboard
+    /// with OSC 52 — no clipboard crate, works over SSH too.
+    fn copy_last(&mut self) {
+        let text = self
+            .entries
+            .borrow()
+            .last()
+            .map(|e| e.text.clone())
+            .unwrap_or_else(|| self.status.clone());
+        if text.is_empty() {
+            return;
+        }
+        let b64 = extras::base64(text.as_bytes());
+        let mut out = io::stdout();
+        let _ = write!(out, "\x1b]52;c;{}\x07", b64);
+        let _ = out.flush();
+        self.status = format!("copied: {}", truncate(&text, 40));
+        self.dirty = true;
     }
 
     fn jump_bottom(&mut self) {
@@ -120,8 +202,38 @@ impl App {
         self.list_state.select(Some(next as usize));
     }
 
-    fn on_key(&mut self, code: KeyCode, shift: bool) {
+    fn on_key(&mut self, code: KeyCode, mods: KeyModifiers) {
         use KeyCode::*;
+        let ctrl = mods.contains(KeyModifiers::CONTROL);
+        let shift = mods.contains(KeyModifiers::SHIFT);
+
+        if ctrl {
+            match code {
+                Char('c') | Char('C') => {
+                    self.running = false;
+                    return;
+                }
+                Char('y') | Char('Y') => {
+                    self.copy_last();
+                    return;
+                }
+                Char('p') | Char('P') => {
+                    self.hist_prev();
+                    return;
+                }
+                Char('n') | Char('N') => {
+                    self.hist_next();
+                    return;
+                }
+                Char('l') | Char('L') => {
+                    self.entries.borrow_mut().clear();
+                    self.dirty = true;
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         match code {
             Char(c) => {
                 if shift && c.is_alphabetic() {
@@ -129,20 +241,49 @@ impl App {
                 } else {
                     self.input.push(c);
                 }
+                self.dirty = true;
             }
             Backspace => {
                 self.input.pop();
+                self.dirty = true;
             }
             Delete => {
                 self.input.clear();
+                self.dirty = true;
             }
             Enter => self.submit(),
-            Up => self.move_sel(-1),
-            Down => self.move_sel(1),
-            PageUp => self.move_sel(-10),
-            PageDown => self.move_sel(10),
-            Home if !self.entries.borrow().is_empty() => self.list_state.select(Some(0)),
-            End => self.jump_bottom(),
+            Up => {
+                if self.input.is_empty() {
+                    self.hist_prev();
+                } else {
+                    self.move_sel(-1);
+                }
+                self.dirty = true;
+            }
+            Down => {
+                if self.input.is_empty() {
+                    self.hist_next();
+                } else {
+                    self.move_sel(1);
+                }
+                self.dirty = true;
+            }
+            PageUp => {
+                self.move_sel(-10);
+                self.dirty = true;
+            }
+            PageDown => {
+                self.move_sel(10);
+                self.dirty = true;
+            }
+            Home if !self.entries.borrow().is_empty() => {
+                self.list_state.select(Some(0));
+                self.dirty = true;
+            }
+            End => {
+                self.jump_bottom();
+                self.dirty = true;
+            }
             Esc => self.running = false,
             _ => {}
         }
@@ -245,6 +386,49 @@ fn truncate(s: &str, w: usize) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Compact window (Windows): shrink the console to a small, focused box.
+// ---------------------------------------------------------------------------
+
+#[cfg(windows)]
+fn compact_window() {
+    use std::ffi::c_void;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetConsoleWindow() -> *mut c_void;
+        fn SetConsoleScreenBufferSize(handle: *mut c_void, size: u32) -> i32;
+        fn SetConsoleWindowInfo(handle: *mut c_void, absolute: i32, rect: *const i16) -> i32;
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn MoveWindow(hwnd: *mut c_void, x: i32, y: i32, w: i32, h: i32, repaint: i32) -> i32;
+        fn GetSystemMetrics(index: i32) -> i32;
+    }
+
+    const COLS: i16 = 92;
+    const ROWS: i16 = 26;
+
+    unsafe {
+        let h = GetConsoleWindow();
+        if h.is_null() {
+            return;
+        }
+        // The buffer must be >= the window before the window can be shrunk.
+        let buffer = (COLS as u32) | ((ROWS as u32) << 16);
+        SetConsoleScreenBufferSize(h, buffer);
+        let rect: [i16; 4] = [0, 0, COLS - 1, ROWS - 1];
+        SetConsoleWindowInfo(h, 1, rect.as_ptr());
+
+        // Roughly centre it horizontally, a little above the middle.
+        let sw = GetSystemMetrics(0); // SM_CXSCREEN
+        let sh = GetSystemMetrics(1); // SM_CYSCREEN
+        let cw = (COLS as i32) * 9;
+        let ch = (ROWS as i32) * 19;
+        MoveWindow(h, (sw - cw) / 2, sh / 7, cw, ch, 1);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Terminal lifecycle
 // ---------------------------------------------------------------------------
 
@@ -266,6 +450,9 @@ fn attach_terminal() -> io::Result<CrosstermBackend<Stdout>> {
 }
 
 pub fn run_tui() -> io::Result<()> {
+    #[cfg(windows)]
+    compact_window();
+
     let backend = attach_terminal()?;
     let mut terminal = ratatui::Terminal::new(backend)?;
     let _ = terminal.hide_cursor();
@@ -276,6 +463,8 @@ pub fn run_tui() -> io::Result<()> {
 
 fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io::Result<()> {
     let mut app = App::new();
+
+    // Cursor-blink ticker: a single detached thread, ~0 CPU.
     let blink = Arc::new(AtomicBool::new(false));
     let b = Arc::clone(&blink);
     let blink_handle: JoinHandle<()> = thread::spawn(move || loop {
@@ -289,29 +478,34 @@ fn event_loop(terminal: &mut ratatui::Terminal<CrosstermBackend<Stdout>>) -> io:
     let _ipc_handle = crate::ipc::spawn_server(&app.summoned);
 
     terminal.draw(|f| app.draw(f))?;
+    app.dirty = false;
+
     while app.running {
         if event::poll(Duration::from_millis(POLL_MS))? {
             match event::read()? {
-                Event::Key(k) if k.kind == KeyEventKind::Press => {
-                    app.on_key(k.code, k.modifiers.contains(KeyModifiers::SHIFT));
-                }
-                Event::Resize(_, _) => {}
+                Event::Key(k) if k.kind == KeyEventKind::Press => app.on_key(k.code, k.modifiers),
+                Event::Resize(_, _) => app.dirty = true,
                 _ => {}
             }
         }
         if app.summoned.swap(false, Ordering::Relaxed) {
             app.status = "summoned from tray".into();
+            app.dirty = true;
         }
         if blink.swap(false, Ordering::Relaxed) {
             app.cursor_visible = !app.cursor_visible;
+            app.dirty = true;
         }
-        terminal.draw(|f| app.draw(f))?;
+        // Redraw only on change: idle cost is a single poll() per 250 ms.
+        if app.dirty {
+            terminal.draw(|f| app.draw(f))?;
+            app.dirty = false;
+        }
     }
+
     drop(blink_handle);
     // A1: deregister the loopback rendezvous so future launches open a fresh
     // window instead of summoning this dead one.
     crate::ipc::unregister();
-    // Enforce the documented scrollback ceiling invariant on shutdown.
-    let _ = SCROLLBACK_CAP;
     Ok(())
 }

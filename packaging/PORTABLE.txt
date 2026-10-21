@@ -1,0 +1,29 @@
+CLDR — Command Line Dispatch & Route  (portable)
+© 2026 Dr. Sohil Momin (drsamonline) — MIT license, attribution required.
+================================================================================
+
+This folder is a self-contained, dependency-free build. Nothing is written
+outside your own config directory.
+
+RUN IT
+  Windows : double-click cldr.exe            (or: cldr.exe --summon)
+  Linux   : ./cldr                            (or: ./cldr --summon)
+
+BIND IT TO A SHORTCUT (recommended)
+  Windows : powershell -ExecutionPolicy Bypass -File scripts\install-shortcut.ps1
+  Linux   : ./install.sh          (then press Super+Alt+C)
+
+TRY IT
+  cldr --exec "2*(3+4)/7"     one-shot, prints the result
+  cldr --exec "10 km in mi"   unit conversion
+  cldr --self-test            verify the build (14 checks)
+  cldr --help                 all flags
+  cldr --config               create/print the config file
+
+Inside the window, type anything: a sum, a path, an app name, a search.
+Use /help for the slash commands. Esc quits, Ctrl+Y copies the last result.
+
+UNINSTALL
+  Windows : run the installer's uninstaller, or delete this folder and the
+            shortcuts created by install-shortcut.ps1
+  Linux   : ./uninstall.sh
