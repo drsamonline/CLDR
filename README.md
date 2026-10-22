@@ -26,24 +26,6 @@
   is a violation of the license terms.
 -->
 
-<div align="center">
-
-<img src="assets/cldr-icon.svg" alt="CLDR icon" width="104"/>
-
-
-**A single tiny binary that sits in your tray, pops up on a keystroke, and runs
-whatever you type — a sum, a path, an app, a search.**
-
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)](#-download)
-[![Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white&style=flat-square)](https://www.rust-lang.org/)
-[![Binary](https://img.shields.io/badge/dependency--free-single%20binary-informational?style=flat-square)](#-design-goals)
-[![RAM](https://img.shields.io/badge/idle%20CPU-~0%25-brightgreen?style=flat-square)](#-design-goals)
-[![License: MIT + attribution](https://img.shields.io/badge/license-MIT%20%2B%20attribution-yellow?style=flat-square)](LICENSE)
-
-*by **[Dr. Sohil Momin](https://github.com/drsamonline)** · no Electron · no Qt/GTK · no async runtime · no clipboard access*
-
-</div>
-
 ---
 
 ![CLDR command window](docs/screenshots/01-main.png)
