@@ -12,7 +12,7 @@
 [![Rust](https://img.shields.io/badge/built%20with-Rust-orange?logo=rust&logoColor=white&style=flat-square)](https://www.rust-lang.org/)
 [![License: MIT + attribution](https://img.shields.io/badge/license-MIT%20%2B%20attribution-yellow?style=flat-square)](LICENSE)
 
-### [Landing page](https://drsamonline.github.io/CLDR/) · [Download the latest release](https://github.com/drsamonline/CLDR/releases) · [User guide](docs/USER_GUIDE.md) · [Setup guide](docs/SETUP_GUIDE.md)
+### [Landing page](https://drsamonline.github.io/CLDR/) · [Download the latest release](https://github.com/drsamonline/CLDR/releases) · [User guide](docs/USER_GUIDE.md) · [Setup guide](docs/SETUP_GUIDE.md) · [All projects](https://drsamonline.github.io/)
 
 </div>
 
