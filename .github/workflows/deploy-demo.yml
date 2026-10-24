@@ -8,10 +8,16 @@
 #
 # What it was missing is the DEPLOY - the same gap the app repos had. A public repo
 # can only call a PUBLIC reusable workflow, and the Pages workflow lived only in the
-# private forge repo, so this site could never deploy and went stale while its
-# source kept changing.
+# private forge repo, so this site could never deploy and went stale while its source
+# kept changing.
 #
 # Only the deploy lives here. The build stays where it belongs.
+#
+# Keep this file MINIMAL. An earlier version of it - identical except that the job
+# was named `pages`, carried its own permissions block and its own concurrency group -
+# was accepted by the API and then produced a run with ZERO JOBS, which is what
+# GitHub does with a workflow it will not start. Nothing in the log, because there
+# was no job to log. This form runs.
 
 name: Deploy the demo
 
@@ -25,16 +31,8 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
-  pages:
+  deploy:
     uses: drsamonline/app-builder/.github/workflows/pages.yml@main
     with:
       path: docs
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
