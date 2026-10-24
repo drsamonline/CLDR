@@ -1,0 +1,40 @@
+# Deploy the demo to Pages.
+#
+# SPDX-FileCopyrightText: 2026 Dr Sohil Momin
+# SPDX-License-Identifier: LicenseRef-Forge-Proprietary
+#
+# This repo is NOT one of the web apps, so it keeps its own build:
+#   it is a Rust command launcher, released by build-release.yml
+#
+# What it was missing is the DEPLOY - the same gap the app repos had. A public repo
+# can only call a PUBLIC reusable workflow, and the Pages workflow lived only in the
+# private forge repo, so this site could never deploy and went stale while its
+# source kept changing.
+#
+# Only the deploy lives here. The build stays where it belongs.
+
+name: Deploy the demo
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  pages:
+    uses: drsamonline/app-builder/.github/workflows/pages.yml@main
+    with:
+      path: docs
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
