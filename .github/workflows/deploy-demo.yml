@@ -38,6 +38,5 @@ concurrency:
 jobs:
   deploy:
     uses: drsamonline/app-builder/.github/workflows/pages.yml@main
-    timeout-minutes: 30
     with:
       path: docs
