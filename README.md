@@ -21,7 +21,7 @@
 <!--
   CLDR — Command Line Dispatch & Route
   © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
-  MIT-licensed: THE ABOVE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN
+  PolyForm Noncommercial-licensed: THE ABOVE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN
   ALL COPIES OR SUBSTANTIAL PORTIONS OF THIS SOFTWARE. Removing this watermark
   is a violation of the license terms.
 -->
@@ -241,7 +241,7 @@ publishes the GitHub Release.
 ## ⚖️ License & attribution
 
 © **2026 Dr. Sohil Momin ([drsamonline](https://github.com/drsamonline))** —
-[MIT licensed with a mandatory attribution clause](LICENSE). Every source, doc,
+[PolyForm Noncommercial licensed with a mandatory attribution clause](LICENSE). Every source, doc,
 script, and asset carries an embedded watermark; **any copy must retain the
 author's name**. Removing watermarks terminates the license grant.
 
