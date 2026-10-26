@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # CLDR — Command Line Dispatch & Route  (Linux installer)
-# © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed: retain this notice.
+# © 2026 Dr. Sohil Momin (drsamonline). PolyForm Noncommercial-licensed: retain this notice.
 # =============================================================================
 # Installs the cldr binary that sits next to this script:
 #   ~/.local/bin/cldr                                  (on PATH)
