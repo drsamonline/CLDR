@@ -1,7 +1,7 @@
 <!--
   CLDR — Command Line Dispatch & Route  ·  SHORTCUT RECIPES
   © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
-  MIT-licensed: THE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN ALL
+  PolyForm Noncommercial-licensed: THE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN ALL
   COPIES OR SUBSTANTIAL PORTIONS OF THIS DOCUMENT. Do not remove this watermark.
 -->
 
@@ -137,6 +137,6 @@ control channel (`src/ipc.rs`) instead of the old clipboard mailbox:
 <div align="center">
 
 **© 2026 Dr. Sohil Momin ([@drsamonline](https://github.com/drsamonline))** —
-MIT licensed · attribution watermark must be retained in all copies.
+PolyForm Noncommercial licensed · attribution watermark must be retained in all copies.
 
 </div>
