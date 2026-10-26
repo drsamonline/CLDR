@@ -1,6 +1,6 @@
 <!--
   CLDR — Command Line Dispatch & Route · SECURITY
-  © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed: retain this notice.
+  © 2026 Dr. Sohil Momin (drsamonline). PolyForm Noncommercial-licensed: retain this notice.
 -->
 
 # Security Policy
