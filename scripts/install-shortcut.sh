@@ -2,7 +2,7 @@
 # =============================================================================
 # CLDR — Command Line Dispatch & Route
 # © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
-# MIT-licensed: THE ABOVE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN
+# PolyForm Noncommercial-licensed: THE ABOVE COPYRIGHT / ATTRIBUTION NOTICE MUST BE RETAINED IN
 # ALL COPIES OR SUBSTANTIAL PORTIONS OF THIS SOFTWARE. Removing this
 # watermark is a violation of the license terms.
 # =============================================================================
