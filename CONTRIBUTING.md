@@ -1,7 +1,7 @@
 <!--
   CLDR — Command Line Dispatch & Route  ·  CONTRIBUTING
   © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
-  MIT-licensed: retain this attribution notice in all copies of this file.
+  PolyForm Noncommercial-licensed: retain this attribution notice in all copies of this file.
 -->
 
 <div align="center">
@@ -27,7 +27,7 @@
    script, asset, workflow — must carry the banner:
 
    ```text
-   © 2026 Dr. Sohil Momin (drsamonline). MIT licensed —
+   © 2026 Dr. Sohil Momin (drsamonline). PolyForm Noncommercial licensed —
    attribution notice must be retained in all copies.
    ```
 
@@ -92,6 +92,6 @@ mismatches before binaries are built.
 <div align="center">
 
 **© 2026 Dr. Sohil Momin ([@drsamonline](https://github.com/drsamonline))** —
-MIT licensed · attribution watermark must be retained in all copies.
+PolyForm Noncommercial licensed · attribution watermark must be retained in all copies.
 
 </div>
