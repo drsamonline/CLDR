@@ -34,6 +34,34 @@
 
 ---
 
+### `/cmd` — run it and read the answer
+
+`/run` spawns detached and shows nothing, which is right for opening an editor.
+`/cmd` is for the other question: *what does this print?*
+
+```text
+> /cmd lumen stats
+$ lumen stats  →  exit 0
+index      /home/you/.local/share/lumen/lumen.db
+photos     131
+favourites 3
+with GPS   0
+folders    4
+
+> /cmd lumen search "harbour at dawn" --json
+> /cmd git status --short
+> /cmd uname -a
+```
+
+- Arguments are split the way a shell would, so quotes work:
+  `/cmd lumen search "harbour at dawn"`.
+- stdout and stderr are both captured, capped at `max_results` rows; a single
+  line longer than 500 characters is truncated.
+- The exit code is shown on the summary line.
+- **It gives up after five seconds.** A launcher that freezes is worse than one
+  that says "still running", so a command that outlives the cap is reported and
+  left running in the background — use `/run` for anything long.
+
 ## 📌 What is CLDR?
 
 CLDR is a **single-binary command launcher** for Windows and Linux. Bind it to a
@@ -57,7 +85,7 @@ desktop shortcut or global hotkey; it stays resident in the background and
 | 🧠 **Smart routing cascade** | math → unit conversion → existing path → PATH binary → web search |
 | 🧮 **Zero-dep calculator** | `+ - * / % ^ ( )` with unary minus, right-associative power, div/mod-by-zero guards |
 | 📐 **Unit conversion** | `10 km in mi`, `100 f to c`, `5kg to lb` — length, mass, temperature |
-| 🗂️ **Slash commands** | `/run` `/open` `/ls` `/find` `/web` `/calc` `/sys` `/help` `/clear` |
+| 🗂️ **Slash commands** | `/run` `/cmd` `/open` `/ls` `/find` `/web` `/calc` `/sys` `/help` `/clear` |
 | ⏱️ **Command history** | `↑`/`↓` (or `Ctrl+P`/`Ctrl+N`), persisted between runs |
 | 📋 **Copy without a clipboard crate** | `Ctrl+Y` copies the last result via OSC 52 — works over SSH |
 | ⚙️ **Config + aliases** | `~/.config/cldr/config.toml` — search engine, caps, and `alias.g = /web` |

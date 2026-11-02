@@ -335,6 +335,7 @@ impl App {
                     "SYS" => Color::Blue,
                     "WEB" => Color::LightBlue,
                     "RUN" => Color::Yellow,
+                    "CMD" => Color::LightGreen,
                     "MATCH" => Color::LightCyan,
                     _ => Color::DarkGray,
                 };
