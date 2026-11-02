@@ -1,3 +1,18 @@
+## Unreleased — `/cmd`, run a command with arguments and read its output
+
+`/run` detaches and discards output. That is correct for launching an editor and
+useless for asking a tool a question.
+
+- **`/cmd <program> [args]`** runs the command, waits for it, and shows stdout
+  and stderr inline with the exit code. Quotes are honoured, so
+  `/cmd lumen search "harbour at dawn"` passes one argument.
+- **Five-second cap.** The command runs on a worker thread and the UI waits with
+  a timeout; a process that outlives the cap is reported as still running rather
+  than freezing the window. `/run` remains the way to start something long.
+- Output is capped at `max_results` rows, and any single line over 500 characters
+  is truncated — one minified JSON line should not push the rest out of the pane.
+- New `CMD` entry kind, coloured light green, distinct from `RUN`.
+
 ## 1.0.0 — 2026-10-25
 
 - **Licence: PolyForm Noncommercial 1.0.0.** Every repository now carries the canonical text

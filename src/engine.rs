@@ -7,7 +7,7 @@
 //! ============================================================================
 //!
 //! Core engine: zero-dependency arithmetic parser, `/`-prefixed command
-//! dispatcher (run/open/ls/find/web/calc/sys/help), and the smart intent
+//! dispatcher (run/cmd/open/ls/find/web/calc/sys/help), and the smart intent
 //! cascade (math → path → PATH binary → web fallback). Shared by the TUI,
 //! the headless runner, and the Windows tray summon window.
 
@@ -18,7 +18,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
+use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 use walkdir::WalkDir;
 
@@ -28,6 +30,18 @@ pub const APP_NAME: &str = "CLDR";
 pub const APP_TAGLINE: &str = "Command Line Dispatch & Route";
 pub const AUTHOR: &str = "Dr. Sohil Momin";
 pub const SCROLLBACK_CAP: usize = 5_000; // hard memory ceiling for results panes
+
+/// How long `/cmd` waits for a process before handing it back to the user.
+///
+/// `/run` detaches precisely so the window never blocks. `/cmd` wants the
+/// output, which means waiting — so it waits a bounded time and then says so.
+/// Five seconds covers a search, a git status or a directory walk; anything
+/// longer belongs in `/run`.
+const CMD_TIMEOUT: Duration = Duration::from_millis(5_000);
+
+/// A single output line longer than this is truncated. One minified JSON line
+/// should not push everything else out of the pane.
+const CMD_LINE_CAP: usize = 500;
 
 // ---------------------------------------------------------------------------
 // Result row model
@@ -305,6 +319,163 @@ pub fn cmd_run(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
         Err(e) => {
             push(entries, Entry::new("ERR", format!("failed to run `{arg}`: {e}")));
             format!("run failed: {e}")
+        }
+    }
+}
+
+
+/// Splits a command line into arguments, honouring single and double quotes and
+/// backslash escapes.
+///
+/// `/cmd` has to accept `/cmd lumen search "harbour at dawn"` — the whole point
+/// of passing arguments is that some of them contain spaces.
+fn split_args(raw: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let mut started = false;
+
+    for ch in raw.chars() {
+        if escaped {
+            cur.push(ch);
+            escaped = false;
+            started = true;
+            continue;
+        }
+        match ch {
+            '\\' if quote != Some('\'') => {
+                escaped = true;
+                started = true;
+            }
+            '"' | '\'' => match quote {
+                Some(open) if open == ch => quote = None,
+                Some(_) => cur.push(ch),
+                None => {
+                    quote = Some(ch);
+                    started = true;
+                }
+            },
+            c if c.is_whitespace() && quote.is_none() => {
+                if started {
+                    out.push(std::mem::take(&mut cur));
+                    started = false;
+                }
+            }
+            c => {
+                cur.push(c);
+                started = true;
+            }
+        }
+    }
+
+    if quote.is_some() {
+        return Err("unbalanced quote".to_string());
+    }
+    if escaped {
+        return Err("trailing backslash".to_string());
+    }
+    if started {
+        out.push(cur);
+    }
+    if out.is_empty() {
+        return Err("no program given".to_string());
+    }
+    Ok(out)
+}
+
+fn truncate_line(line: &str, cap: usize) -> String {
+    if line.chars().count() <= cap {
+        return line.to_string();
+    }
+    let mut s: String = line.chars().take(cap).collect();
+    s.push('…');
+    s
+}
+
+/// `/cmd <program> [args]` — run it, wait a bounded time, show what it printed.
+///
+/// The difference from `/run`: `/run` detaches and shows nothing, which is right
+/// for opening an editor. `/cmd` is for the question "what does this print" —
+/// so it captures stdout and stderr, shows the exit code, and gives up after
+/// [`CMD_TIMEOUT`] rather than freezing the window.
+pub fn cmd_cmd(arg: &str, entries: &Rc<RefCell<Vec<Entry>>>) -> String {
+    if arg.trim().is_empty() {
+        push(
+            entries,
+            Entry::new("ERR", "/cmd <program> [args] — run it and show the output"),
+        );
+        return "usage: /cmd".into();
+    }
+
+    let argv = match split_args(arg) {
+        Ok(v) => v,
+        Err(e) => {
+            push(entries, Entry::new("ERR", format!("/cmd: {e}")));
+            return format!("cmd: {e}");
+        }
+    };
+
+    let program = argv[0].clone();
+    let args: Vec<String> = argv[1..].to_vec();
+    let cap = extras::config().max_results;
+
+    // Run on a worker so the window keeps painting, and so a command that never
+    // returns cannot hang the launcher. The worker takes its own copy of the
+    // program name: `program` is still needed below for the error messages.
+    let worker_program = program.clone();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let result = Command::new(&worker_program)
+            .args(&args)
+            .stdin(Stdio::null())
+            .output();
+        let _ = tx.send(result);
+    });
+
+    match rx.recv_timeout(CMD_TIMEOUT) {
+        Ok(Ok(output)) => {
+            let code = output.status.code().unwrap_or(-1);
+            let mut lines: Vec<String> = Vec::new();
+            'streams: for stream in [&output.stdout, &output.stderr] {
+                for line in String::from_utf8_lossy(stream).lines() {
+                    if lines.len() >= cap {
+                        break 'streams;
+                    }
+                    lines.push(truncate_line(line, CMD_LINE_CAP));
+                }
+            }
+
+            push(
+                entries,
+                Entry::new("INFO", format!("$ {arg}  →  exit {code}")),
+            );
+            if lines.is_empty() {
+                push(entries, Entry::new("OK", "(no output)"));
+            } else {
+                for line in lines {
+                    push(entries, Entry::new("CMD", line));
+                }
+            }
+            format!("cmd: exit {code}")
+        }
+        Ok(Err(e)) => {
+            push(entries, Entry::new("ERR", format!("/cmd {program}: {e}")));
+            format!("cmd failed: {e}")
+        }
+        Err(_) => {
+            push(
+                entries,
+                Entry::new(
+                    "INFO",
+                    format!(
+                        "/cmd {program}: still running after {}s — left running in the \
+                         background. Use /run for long jobs.",
+                        CMD_TIMEOUT.as_secs()
+                    ),
+                ),
+            );
+            "cmd: still running".into()
         }
     }
 }
@@ -642,6 +813,7 @@ fn dispatch(raw: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>, depth: u8)
     };
     match head {
         "run" => cmd_run(arg, entries),
+        "cmd" => cmd_cmd(arg, entries),
         "open" => cmd_open(arg, entries),
         "ls" => cmd_ls(arg, entries),
         "find" => cmd_find(arg, cwd, entries),
@@ -663,6 +835,7 @@ fn dispatch(raw: &str, cwd: &Path, entries: &Rc<RefCell<Vec<Entry>>>, depth: u8)
 pub fn show_help(entries: &Rc<RefCell<Vec<Entry>>>) -> String {
     let rows = [
         ("/run <binary>", "spawn detached via OS shell"),
+        ("/cmd <prog> [args]", "run it, show stdout/stderr (5 s cap)"),
         ("/open <path>", "open file/folder in default viewer"),
         ("/ls [path]", "list directory (row-capped)"),
         ("/find <name>", "recursive search, depth-capped"),
