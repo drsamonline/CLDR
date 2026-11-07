@@ -9,11 +9,11 @@
       "at": "2026-11-04T19:37:38Z"
     },
     "docs/index.html": {
-      "sha": "9dd8f080b8e6a94f9eb6244d046fc70be4da0e0b",
-      "producer": "bootstrap@2026-11-04",
+      "sha": "ddee5350e32cafb4b3b3b723e6186bbc35908ed7",
+      "producer": "manual@2026-11-07",
       "class": "generated",
-      "at": "2026-11-06T18:55:54Z"
+      "at": "2026-11-07T13:43:19Z"
     }
   },
-  "updated": "2026-11-06T18:55:54Z"
+  "updated": "2026-11-07T13:43:19Z"
 }

@@ -469,7 +469,7 @@
         <span class="tag">05</span>
         <svg class="ico" aria-hidden="true"><use href="#i-slash"/></svg>
         <h3>Slash commands</h3>
-        <p><code>/run</code> <code>/open</code> <code>/ls</code> <code>/find</code> <code>/web</code> <code>/calc</code> <code>/sys</code> <code>/help</code> <code>/clear</code>.</p>
+        <p><code>/run</code> <code>/cmd</code> <code>/open</code> <code>/ls</code> <code>/find</code> <code>/web</code> <code>/calc</code> <code>/sys</code> <code>/help</code> <code>/clear</code>.</p>
       </article>
       <article class="card reveal">
         <span class="tag">06</span>
@@ -587,6 +587,7 @@
           <thead><tr><th>Command</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td>/run &lt;binary&gt;</td><td>spawn detached via the OS shell</td></tr>
+            <tr><td>/cmd &lt;prog&gt; [args]</td><td>run it, wait, show stdout/stderr and exit code</td></tr>
             <tr><td>/open &lt;path&gt;</td><td>open a file/folder in the default viewer</td></tr>
             <tr><td>/ls [path]</td><td>list a directory (row-capped)</td></tr>
             <tr><td>/find &lt;name&gt;</td><td>recursive search (depth-capped)</td></tr>
