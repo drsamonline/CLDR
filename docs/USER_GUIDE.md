@@ -58,9 +58,10 @@ Unit conversion understands length (`mm cm m km in ft yd mi nmi`), mass
 | Command | Example | Result |
 |---|---|---|
 | `/run <cmd>` | `/run notepad` | detached spawn via OS shell |
+| `/cmd <prog> [args]` | `/cmd git status --short` | run it, wait, show stdout/stderr + exit code |
 | `/open <path>` | `/open C:\Temp` | native "open with default" |
-| `/ls [path]` | `/ls ~/` | directory listing (≤ 50 rows) |
-| `/find <name>` | `/find report.pdf` | recursive search, depth ≤ 4, ≤ 50 hits |
+| `/ls [path]` | `/ls ~/` | directory listing (row-capped) |
+| `/find <name>` | `/find report.pdf` | recursive search (depth- and row-capped) |
 | `/web <query>` | `/web cat facts` | browser search |
 | `/calc <expr>` | `/calc (1+2)*3^…` | arithmetic `+ - * / % ^ ( ) unary-` |
 | `/sys` | `/sys` | cores, RAM, hostname, user |
@@ -68,6 +69,32 @@ Unit conversion understands length (`mm cm m km in ft yd mi nmi`), mass
 | `/clear` | | clear results pane |
 
 Paths accept `~`, `~/sub`, absolute and relative forms on both platforms.
+Row and depth caps default to 50 and 4 and can be changed in the config file
+(see [§6a](#6a-configuration--aliases)).
+
+### `/run` vs `/cmd`
+
+These answer two different questions, and picking the wrong one is the usual
+surprise:
+
+* **`/run`** — *start this and get out of my way.* It detaches immediately and
+  shows nothing. Right for opening an editor, a browser, a GUI app.
+* **`/cmd`** — *what does this print?* It runs the program, waits a bounded time
+  (5 seconds), then shows the exit code and the captured stdout and stderr.
+  Right for `git status`, a CLI that answers a question, a build step you want
+  to read.
+
+```text
+> /cmd git status --short
+  $ git status --short  →  exit 0
+  M src/engine.rs
+  ?? notes.md
+```
+
+Arguments are split shell-style, so quoting works:
+`/cmd lumen search "harbour at dawn" --json`. `/cmd` runs on a worker thread, so
+a slow command never freezes the window — it is abandoned once the time limit
+runs out.
 
 ## 5. Keyboard reference (in-window)
 
@@ -104,7 +131,7 @@ cldr --daemon-stop                # graceful shutdown (sentinel file)
 (`%APPDATA%\cldr\config.toml` on Windows). Everything is optional:
 
 ```toml
-search_url = "https://duckduckgo.com/?q={q}"   # change the search engine
+search_url = "https://duckduckgo.com/"   # change the search engine
 max_results = 50                                 # /ls and /find row cap
 find_depth  = 4                                  # /find recursion depth
 alias.g  = /web                                  # "g rust" → "/web rust"
