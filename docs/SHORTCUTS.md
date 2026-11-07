@@ -10,7 +10,7 @@
 # ⌨️ CLDR — Shortcut & Hotkey Recipes
 
 ![Target command](https://img.shields.io/badge/bind%20this-cldr%20--summon-informational?style=flat-square)
-![Version](https://img.shields.io/badge/works%20with-v1.3.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/works%20with-v1.3.1-blue?style=flat-square)
 
 *← [README](../README.md) · [Setup Guide](SETUP_GUIDE.md) · [User Guide](USER_GUIDE.md)*
 

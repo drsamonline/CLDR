@@ -1,4 +1,4 @@
-## Unreleased — `/cmd`, run a command with arguments and read its output
+## 1.3.1 — 2026-11-07 — `/cmd`, run a command with arguments and read its output
 
 `/run` detaches and discards output. That is correct for launching an editor and
 useless for asking a tool a question.
@@ -24,7 +24,7 @@ useless for asking a tool a question.
 <!--
   CLDR — Command Line Dispatch & Route  ·  CHANGELOG
   © 2026 Dr. Sohil Momin (drsamonline). All rights reserved.
-  PolyForm Noncommercial-licensed: retain this attribution notice in all copies of this file.
+  MIT-licensed: retain this attribution notice in all copies of this file.
 -->
 
 # Changelog
@@ -191,6 +191,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <div align="center">
 
 **© 2026 Dr. Sohil Momin ([@drsamonline](https://github.com/drsamonline))** —
-PolyForm Noncommercial licensed · attribution watermark must be retained in all copies.
+MIT licensed · attribution watermark must be retained in all copies.
 
 </div>

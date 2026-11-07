@@ -10,7 +10,7 @@
 # 🛠️ CLDR — Setup Guide
 
 [![Build & Release](https://github.com/drsamonline/cldr/actions/workflows/build-release.yml/badge.svg)](https://github.com/drsamonline/cldr/actions/workflows/build-release.yml)
-![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.3.1-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?style=flat-square)
 
 *← [README](../README.md) · [User Guide](USER_GUIDE.md) · [Shortcut recipes](SHORTCUTS.md)*
