@@ -56,7 +56,8 @@ folders    4
 - Arguments are split the way a shell would, so quotes work:
   `/cmd lumen search "harbour at dawn"`.
 - stdout and stderr are both captured, capped at `max_results` rows; a single
-  line longer than 500 characters is truncated.
+  line longer than 500 characters is truncated and says how many characters
+  were dropped (`… (+39412 chars)`).
 - The exit code is shown on the summary line.
 - **It gives up after five seconds.** A launcher that freezes is worse than one
   that says "still running", so a command that outlives the cap is reported and
