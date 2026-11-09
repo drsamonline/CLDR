@@ -1,0 +1,29 @@
+# =============================================================================
+# CLDR — cocogitto configuration (conventional commits)
+# © 2026 Dr. Sohil Momin (drsamonline). MIT-licensed — retain this notice.
+# =============================================================================
+#
+# `cog check` runs on every pull request over the commits the PR adds (see the
+# `commits` job in .github/workflows/build-release.yml). The type list is this
+# repo's own: `licence` and `sweep` are used throughout the history, and
+# `release` marks a version bump, so all three are declared here rather than
+# being reported as violations.
+#
+# Local use:   cog check main..HEAD
+ignore_merge_commits = true
+
+[commit_types]
+feat = { changelog_title = "Features" }
+fix = { changelog_title = "Fixes" }
+docs = { changelog_title = "Documentation" }
+build = { changelog_title = "Build" }
+ci = { changelog_title = "CI" }
+release = { changelog_title = "Releases" }
+chore = { changelog_title = "Chores", omit_from_changelog = true }
+licence = { changelog_title = "Licence", omit_from_changelog = true }
+sweep = { changelog_title = "Sweeps", omit_from_changelog = true }
+refactor = { changelog_title = "Refactoring", omit_from_changelog = true }
+test = { changelog_title = "Tests", omit_from_changelog = true }
+perf = { changelog_title = "Performance" }
+style = { changelog_title = "Style", omit_from_changelog = true }
+revert = { changelog_title = "Reverts", omit_from_changelog = true }

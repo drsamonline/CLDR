@@ -71,7 +71,10 @@ cargo clippy --all-targets -- -D warnings
 4. Watermark every new file (see ground rule 2).
 5. Ensure your commit tree contains **no** `target/`, logs, or OS junk
    (`.gitignore` covers these — don't weaken it).
-6. Open the PR against `main`; CI runs automatically. Maintainer review required.
+6. Write conventional commit subjects (`feat:`, `fix:`, `docs:`, `ci:`, …; the
+   full list is in `cog.toml`). The `Conventional commits` job checks the
+   commits your PR adds — `cog check main..HEAD` reproduces it locally.
+7. Open the PR against `main`; CI runs automatically. Maintainer review required.
 
 ## Reporting issues
 

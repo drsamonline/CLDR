@@ -301,3 +301,33 @@ jobs:
 
             ---
             © 2026 Dr. Sohil Momin (drsamonline) — MIT license, attribution required.
+
+  # ---------------------------------------------------------------------------
+  # Conventional commits — advisory, pull requests only.
+  #
+  # Checks the commits the PR adds against the types in `cog.toml`, never the
+  # history: 52 of the 82 commits written before this gate used a type outside
+  # the standard set (`licence:`, `sweep:`, title-cased subjects), and a gate
+  # that relitigates them would be red on arrival and ignored thereafter.
+  # Promote to blocking once a few PRs have passed through it clean.
+  # ---------------------------------------------------------------------------
+  commits:
+    name: Conventional commits
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # was @v4
+        with:
+          fetch-depth: 0
+
+      - name: Install cocogitto 7.0.0
+        run: |
+          curl -fsSL -o cog.tar.gz \
+            https://github.com/cocogitto/cocogitto/releases/download/7.0.0/cocogitto-7.0.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf cog.tar.gz
+          sudo install -m 0755 "$(find . -maxdepth 2 -type f -name cog | head -1)" /usr/local/bin/cog
+          cog --version
+
+      - name: cog check (PR commits only)
+        run: cog check "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
