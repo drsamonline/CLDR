@@ -84,7 +84,7 @@ desktop shortcut or global hotkey; it stays resident in the background and
 | 🪟 **Tray-resident, one keystroke** | Lives in the background; the shortcut **summons** the existing window instead of opening a duplicate |
 | 🧠 **Smart routing cascade** | math → unit conversion → existing path → PATH binary → web search |
 | 🧮 **Zero-dep calculator** | `+ - * / % ^ ( )` with unary minus, right-associative power, div/mod-by-zero guards |
-| 📐 **Unit conversion** | `10 km in mi`, `100 f to c`, `5kg to lb` — length, mass, temperature |
+| 📐 **Unit conversion** | `10 km in mi`, `2 h in min`, `10 GB in MB` — ten dimensions: length, mass, time, volume, area, speed, data, pressure, energy, temperature |
 | 🗂️ **Slash commands** | `/run` `/cmd` `/open` `/ls` `/find` `/web` `/calc` `/sys` `/help` `/clear` |
 | ⏱️ **Command history** | `↑`/`↓` (or `Ctrl+P`/`Ctrl+N`), persisted between runs |
 | 📋 **Copy without a clipboard crate** | `Ctrl+Y` copies the last result via OSC 52 — works over SSH |

@@ -49,9 +49,25 @@ on PATH as a binary?  → spawn detached          e.g.  code .
 otherwise?            → web search              e.g.  rust lifetimes
 ```
 
-Unit conversion understands length (`mm cm m km in ft yd mi nmi`), mass
-(`mg g kg oz lb st t`) and temperature (`c f k`), and accepts long names
-(`10 kilometres in miles`).
+Unit conversion understands ten dimensions:
+
+| Dimension | Units |
+|---|---|
+| length | `mm cm m km in ft yd mi nmi` |
+| mass | `mg g kg oz lb st t` |
+| time | `ms s min h day week` |
+| volume | `ml cl dl l m3 tsp tbsp floz cup pint quart gal` |
+| area | `m2 km2 cm2 ha acre ft2 yd2 mi2` |
+| speed | `m/s km/h mph kn ft/s` |
+| data | `b kb mb gb tb` (decimal, 1 kB = 1000 B) and `kib mib gib tib` (binary) |
+| pressure | `pa kpa mpa bar mbar atm psi mmhg torr` |
+| energy | `j kj mj cal kcal wh kwh btu` |
+| temperature | `c f k` |
+
+Long names work (`10 kilometres in miles`, `2 hours in minutes`). The amount on
+the left may be a literal, an exponent (`1e3 m in km`) or an expression
+(`2*3 km in mi`). A unit only converts inside its own dimension: `10 km in kg`
+is not a conversion, and falls through to the next step of the cascade.
 
 ## 4. Slash commands
 
