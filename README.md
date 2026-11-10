@@ -56,7 +56,8 @@ folders    4
 - Arguments are split the way a shell would, so quotes work:
   `/cmd lumen search "harbour at dawn"`.
 - stdout and stderr are both captured, capped at `max_results` rows; a single
-  line longer than 500 characters is truncated.
+  line longer than 500 characters is truncated and says how many characters
+  were dropped (`… (+39412 chars)`).
 - The exit code is shown on the summary line.
 - **It gives up after five seconds.** A launcher that freezes is worse than one
   that says "still running", so a command that outlives the cap is reported and
@@ -84,7 +85,7 @@ desktop shortcut or global hotkey; it stays resident in the background and
 | 🪟 **Tray-resident, one keystroke** | Lives in the background; the shortcut **summons** the existing window instead of opening a duplicate |
 | 🧠 **Smart routing cascade** | math → unit conversion → existing path → PATH binary → web search |
 | 🧮 **Zero-dep calculator** | `+ - * / % ^ ( )` with unary minus, right-associative power, div/mod-by-zero guards |
-| 📐 **Unit conversion** | `10 km in mi`, `100 f to c`, `5kg to lb` — length, mass, temperature |
+| 📐 **Unit conversion** | `10 km in mi`, `2 h in min`, `10 GB in MB` — ten dimensions: length, mass, time, volume, area, speed, data, pressure, energy, temperature |
 | 🗂️ **Slash commands** | `/run` `/cmd` `/open` `/ls` `/find` `/web` `/calc` `/sys` `/help` `/clear` |
 | ⏱️ **Command history** | `↑`/`↓` (or `Ctrl+P`/`Ctrl+N`), persisted between runs |
 | 📋 **Copy without a clipboard crate** | `Ctrl+Y` copies the last result via OSC 52 — works over SSH |

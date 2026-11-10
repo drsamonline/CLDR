@@ -384,12 +384,18 @@ fn split_args(raw: &str) -> Result<Vec<String>, String> {
     Ok(out)
 }
 
+/// Cut a long output line at `cap` characters and say how much was dropped.
+///
+/// A bare ellipsis leaves the reader unable to tell a line that just wrapped
+/// from one with 40 KB of minified JSON behind it; the count makes the size of
+/// what is missing visible without printing any of it.
 fn truncate_line(line: &str, cap: usize) -> String {
-    if line.chars().count() <= cap {
+    let total = line.chars().count();
+    if total <= cap {
         return line.to_string();
     }
     let mut s: String = line.chars().take(cap).collect();
-    s.push('…');
+    s.push_str(&format!("… (+{} chars)", total - cap));
     s
 }
 
@@ -923,5 +929,15 @@ mod tests {
     #[test]
     fn url_encoding() {
         assert_eq!(urlencode("hi there&you"), "hi+there%26you");
+    }
+
+    #[test]
+    fn long_lines_say_how_much_was_cut() {
+        let line = "x".repeat(600);
+        let out = truncate_line(&line, 500);
+        assert!(out.ends_with("… (+100 chars)"), "truncation marker missing");
+        assert_eq!(out.chars().count(), 500 + "… (+100 chars)".chars().count());
+        // A line at or under the cap is untouched.
+        assert_eq!(truncate_line("short", 500), "short");
     }
 }
