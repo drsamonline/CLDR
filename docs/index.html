@@ -310,6 +310,18 @@
   } catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
 })();
 </script>
+<style>
+/* ---- a11y: the rule each label needs, chosen against its measured surface -- */
+pre *{color:#ffffff!important}   /* the ink is in the syntax spans */
+
+[data-theme="light"] a.btn.ghost{color:#0b1020!important}
+[data-theme="light"] pre{color:#ffffff!important}
+[data-theme="dark"] pre{color:#ffffff!important}
+[data-theme="light"] a.btn{color:#ffffff!important}
+[data-theme="light"] pre{color:#ffffff!important}
+[data-theme="light"] code{color:#0b1020!important}
+[data-theme="dark"] pre{color:#ffffff!important}
+</style>
 </head>
 <body>
 
